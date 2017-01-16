@@ -103,6 +103,8 @@ def env_description(env, policy, v):
     print(policy)
     print("")
 
+    import pdb; pdb.set_trace()
+
     print("Reshaped Grid Policy (0=up, 1=right, 2=down, 3=left):")
     print(np.reshape(np.argmax(policy, axis=1), (env.nrow, env.ncol)))
     print("")
@@ -136,7 +138,7 @@ def _parse_args():
     parser = argparse.ArgumentParser(description='Policy iteration example')
     parser.add_argument('--env',
                         type=str,
-                        default='FrozenLake8x8-v0',
+                        default='Taxi-v1',
                         help='The environment to use')
     parser.add_argument('--num_episodes',
                         type=int,
@@ -144,7 +146,7 @@ def _parse_args():
                         help='Number of episodes')
     parser.add_argument('--gamma',
                         type=float,
-                        default=0.9,
+                        default=0.99,
                         help='Gamma discount factor')
     parser.add_argument('--verbose',
                         action='store_true',
@@ -163,7 +165,11 @@ def run(env, n_episodes, discount_factor, verbose=False, api_key=None):
     if api_key is not None:
         env.monitor.start("/tmp/" + env_name, force=True)
     policy, v = policy_improvement(env, discount_factor=discount_factor)
-    env_description(env, policy, v)
+    if verbose:
+        try:
+            env_description(env, policy, v)
+        except:
+            print("Sorry, something go wrong.")
     rewards = env_run(env, n_episodes, policy, verbose)
     print("Avg rewards over {} episodes: {:.4f} +/-{:.4f}".format(
         n_episodes, np.mean(rewards), np.std(rewards)))
