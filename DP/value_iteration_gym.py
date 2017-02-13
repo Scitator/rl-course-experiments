@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import gym
+from gym import wrappers
 import argparse
 import numpy as np
 
@@ -27,24 +28,24 @@ def value_iteration(env, theta=0.0001, discount_factor=1.0):
 
         Args:
             state: The state to consider (int)
-            V: The value to use as an estimator, Vector of length env.nS
+            V: The value to use as an estimator, Vector of length env.observation_space.n
 
         Returns:
-            A vector of length env.nA
+            A vector of length env.action_space.n`
                 containing the expected value of each action.
         """
-        A = np.zeros(env.nA)
-        for a in range(env.nA):
-            for prob, next_state, reward, done in env.P[state][a]:
+        A = np.zeros(env.action_space.n)
+        for a in range(env.action_space.n):
+            for prob, next_state, reward, done in env.env.env.P[state][a]:
                 A[a] += prob * (reward + discount_factor * V[next_state])
         return A
 
-    V = np.zeros(env.nS)
+    V = np.zeros(env.observation_space.n)
     while True:
         # Stopping condition
         delta = 0
         # Update each state...
-        for s in range(env.nS):
+        for s in range(env.observation_space.n):
             # Do a one-step lookahead to find the best action
             A = one_step_lookahead(s, V)
             best_action_value = np.max(A)
@@ -57,8 +58,8 @@ def value_iteration(env, theta=0.0001, discount_factor=1.0):
             break
 
     # Create a deterministic policy using the optimal value function
-    policy = np.zeros([env.nS, env.nA])
-    for s in range(env.nS):
+    policy = np.zeros([env.observation_space.n, env.action_space.n])
+    for s in range(env.observation_space.n):
         # One step lookahead to find the best action for this state
         A = one_step_lookahead(s, V)
         best_action = np.argmax(A)
@@ -131,7 +132,7 @@ def run(env, n_episodes, discount_factor, verbose=False, api_key=None):
     env_name = env
     env = gym.make(env)
     if api_key is not None:
-        env.monitor.start("/tmp/" + env_name, force=True)
+        env = gym.wrappers.Monitor(env, "/tmp/" + env_name, force=True)
     policy, v = value_iteration(env, discount_factor=discount_factor)
     if verbose:
         try:
@@ -142,7 +143,7 @@ def run(env, n_episodes, discount_factor, verbose=False, api_key=None):
     print("Avg rewards over {} episodes: {:.4f} +/-{:.4f}".format(
         n_episodes, np.mean(rewards), np.std(rewards)))
     if api_key is not None:
-        env.monitor.close()
+        env.close()
         gym.upload("/tmp/" + env_name, api_key=api_key)
 
 

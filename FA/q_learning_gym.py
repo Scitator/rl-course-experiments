@@ -1,6 +1,7 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import gym
+from gym import wrappers
 import sys
 import argparse
 import numpy as np
@@ -8,8 +9,8 @@ import sklearn.pipeline
 import sklearn.preprocessing
 from sklearn.linear_model import SGDRegressor
 from sklearn.kernel_approximation import RBFSampler
-from matplotlib import pyplot as plt
 
+from matplotlib import pyplot as plt
 plt.style.use("ggplot")
 
 
@@ -69,7 +70,8 @@ class Estimator(object):
 
     def _prepare_estimator_for_env(self, env):
         observation_examples = np.array(
-            [env.observation_space.sample() for x in range(10000)])
+            [env.observation_space.sample() for _ in range(1000)])
+        observation_examples = self._vectorise_state(observation_examples)
 
         scaler = sklearn.preprocessing.StandardScaler()
         scaler.fit(observation_examples)
@@ -84,11 +86,18 @@ class Estimator(object):
         featurizer.fit(scaler.transform(observation_examples))
         self.featurizer = featurizer
 
+    def _vectorise_state(self, states):
+        obs_shape = states.shape
+        if len(obs_shape) > 2:
+            states = states.reshape((obs_shape[0], -1))
+        return states
+
     def featurize_state(self, state):
         """
         Returns the featurized representation for a state.
         """
-        scaled = self.scaler.transform([state])
+        state = self._vectorise_state(np.array([state]))
+        scaled = self.scaler.transform(state)
         featurized = self.featurizer.transform(scaled)
         return featurized[0]
 
@@ -162,7 +171,8 @@ def q_learning(env, estimator, num_episodes, discount_factor=1.0, epsilon=0.1, e
         done = False
         while not done:
             if verbose:
-                env.render()
+                pass
+                # env.render()
             if n_action is None:
                 probs = policy(state)
                 action = np.random.choice(np.arange(len(probs)), p=probs)
@@ -226,7 +236,7 @@ def run(env, n_episodes, discount_factor, verbose=False, plot_stats=False, api_k
     estimator = Estimator(env)
 
     if api_key is not None:
-        env.monitor.start("/tmp/" + env_name, force=True)
+        env = gym.wrappers.Monitor(env, "/tmp/" + env_name, force=True)
 
     stats = q_learning(env, estimator, n_episodes,
                        discount_factor=discount_factor, epsilon=0.0,
@@ -235,7 +245,7 @@ def run(env, n_episodes, discount_factor, verbose=False, plot_stats=False, api_k
         save_stats(stats)
 
     if api_key is not None:
-        env.monitor.close()
+        env.close()
         gym.upload("/tmp/" + env_name, api_key=api_key)
 
 

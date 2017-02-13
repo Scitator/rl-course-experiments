@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import gym
+from gym import wrappers
 import argparse
 import numpy as np
 
@@ -20,14 +21,14 @@ def policy_eval(policy, env, discount_factor=1.0, theta=0.00001):
         discount_factor: lambda discount factor.
 
     Returns:
-        Vector of length env.nS representing the value function.
+        Vector of length env.observation_space.n representing the value function.
     """
     # Start with a random (all 0) value function
-    V = np.zeros(env.nS)
+    V = np.zeros(env.observation_space.n)
     while True:
         delta = 0
         # For each state, perform a "full backup"
-        for s in range(env.nS):
+        for s in range(env.observation_space.n):
             v = 0
             # Look at the possible next actions
             for a, action_prob in enumerate(policy[s]):
@@ -65,7 +66,7 @@ def policy_improvement(env, policy_eval_fn=policy_eval, discount_factor=1.0):
 
     """
     # Start with a random policy
-    policy = np.ones([env.nS, env.nA]) / env.nA
+    policy = np.ones([env.observation_space.n, env.action_space.n]) / env.action_space.n
 
     while True:
         # Evaluate the current policy
@@ -75,14 +76,14 @@ def policy_improvement(env, policy_eval_fn=policy_eval, discount_factor=1.0):
         policy_stable = True
 
         # For each state...
-        for s in range(env.nS):
+        for s in range(env.observation_space.n):
             # The best action we would take under the currect policy
             chosen_a = np.argmax(policy[s])
 
             # Find the best action by one-step lookahead
             # Ties are resolved arbitarily
-            action_values = np.zeros(env.nA)
-            for a in range(env.nA):
+            action_values = np.zeros(env.action_space.n)
+            for a in range(env.action_space.n):
                 for prob, next_state, reward, done in env.P[s][a]:
                     action_values[a] += prob * (
                         reward + discount_factor * V[next_state])
@@ -91,7 +92,7 @@ def policy_improvement(env, policy_eval_fn=policy_eval, discount_factor=1.0):
             # Greedily update the policy
             if chosen_a != best_a:
                 policy_stable = False
-            policy[s] = np.eye(env.nA)[best_a]
+            policy[s] = np.eye(env.action_space.n)[best_a]
 
         # If the policy is stable we've found an optimal policy. Return it
         if policy_stable:
@@ -163,7 +164,7 @@ def run(env, n_episodes, discount_factor, verbose=False, api_key=None):
     env_name = env
     env = gym.make(env)
     if api_key is not None:
-        env.monitor.start("/tmp/" + env_name, force=True)
+        env = gym.wrappers.Monitor(env, "/tmp/" + env_name, force=True)
     policy, v = policy_improvement(env, discount_factor=discount_factor)
     if verbose:
         try:
@@ -174,7 +175,7 @@ def run(env, n_episodes, discount_factor, verbose=False, api_key=None):
     print("Avg rewards over {} episodes: {:.4f} +/-{:.4f}".format(
         n_episodes, np.mean(rewards), np.std(rewards)))
     if api_key is not None:
-        env.monitor.close()
+        env.close()
         gym.upload("/tmp/" + env_name, api_key=api_key)
 
 

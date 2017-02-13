@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import gym
+from gym import wrappers
 import sys
 import argparse
 import numpy as np
@@ -145,7 +146,7 @@ def run(env, n_episodes, discount_factor, verbose=False, plot_stats=False, api_k
     env = gym.make(env)
 
     if api_key is not None:
-        env.monitor.start("/tmp/" + env_name, force=True)
+        env = gym.wrappers.Monitor(env, "/tmp/" + env_name, force=True)
 
     stats = q_learning(env, n_episodes,
                        discount_factor=discount_factor,
@@ -154,7 +155,7 @@ def run(env, n_episodes, discount_factor, verbose=False, plot_stats=False, api_k
         save_stats(stats)
 
     if api_key is not None:
-        env.monitor.close()
+        env.close()
         gym.upload("/tmp/" + env_name, api_key=api_key)
 
 
