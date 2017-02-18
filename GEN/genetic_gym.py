@@ -8,6 +8,16 @@ import random
 from tqdm import trange
 
 
+def get_random_policy(env):
+    """
+    Build a numpy array representing agent policy.
+    This array must have one element per each of 16 environment states.
+    Element must be an integer from 0 to 3, representing action
+    to take from that state.
+    """
+    return np.random.randint(0, int(env.action_space.n), int(env.observation_space.n))
+
+
 def sample_reward(env, policy, t_max=100):
     """
     Interact with an environment, return sum of all rewards.
@@ -27,28 +37,18 @@ def sample_reward(env, policy, t_max=100):
     return total_reward
 
 
-def get_random_policy(env):
-    """
-    Build a numpy array representing agent policy.
-    This array must have one element per each of 16 environment states.
-    Element must be an integer from 0 to 3, representing action
-    to take from that state.
-    """
-    return np.random.randint(0, int(env.action_space.n), int(env.observation_space.n))
-
-
-def evaluate(env, policy, n_times=100, t_max=100):
+def evaluate(sample_func, env, policy, n_times=100):
     """Run several evaluations and average the score the policy gets."""
-    rewards = [sample_reward(env, policy, t_max=t_max) for _ in range(n_times)]
+    rewards = [sample_func(env, policy) for _ in range(n_times)]
     return float(np.mean(rewards))
 
 
-def crossover(env, policy1, policy2, p=0.5, prioritize=False):
+def crossover(env, policy1, policy2, p=0.5, prioritize_func=None):
     """
     for each state, with probability p take action from policy1, else policy2
     """
-    if prioritize:
-        p *= min(evaluate(env, policy1)/max(evaluate(env, policy2), 0.001), 1.0/p)
+    if prioritize_func is not None:
+        p = prioritize_func(env, policy1, policy2, p)
     return np.choose(
         (np.random.random_sample(policy1.shape[0]) <= p).astype(int), [policy1, policy2])
 
@@ -77,7 +77,7 @@ def _parse_args():
                         help='Max number per episode')
     parser.add_argument('--pool_size',
                         type=int,
-                        default=20,
+                        default=200,
                         help='Population size')
     parser.add_argument('--n_crossovers',
                         type=int,
@@ -111,12 +111,12 @@ def run(env, n_episodes, max_steps,
     env = gym.make(env)
     env.reset()
 
+    if api_key is not None:
+        env = gym.wrappers.Monitor(env, "/tmp/" + env_name, force=True)
+
     if verbose:
         print("initializing...")
     pool = [get_random_policy(env) for _ in range(pool_size)]
-
-    if api_key is not None:
-        env = gym.wrappers.Monitor(env, "/tmp/" + env_name, force=True)
 
     rewards = np.zeros(n_episodes)
 
@@ -125,9 +125,19 @@ def run(env, n_episodes, max_steps,
         desc="best score: {:.4}".format(0.0),
         leave=True)
 
+    def sample_func(env, policy):
+        return sample_reward(
+            env, policy, t_max=max_steps if api_key is None else int(1e10))
+
+    def prioritize_func(env, policy1, policy2, p):
+        return min(
+            p * evaluate(sample_func, env, policy1) / (evaluate(sample_func, env, policy2) + 0.001),
+            1.0)
+
     for i_epoch in tr:
         crossovered = [
-            crossover(env, random.choice(pool), random.choice(pool), prioritize=True)
+            crossover(env, random.choice(pool), random.choice(pool),
+                      prioritize_func=prioritize_func)
             for _ in range(n_crossovers)]
         mutated = [mutation(env, random.choice(pool)) for _ in range(n_mutations)]
 
@@ -135,7 +145,7 @@ def run(env, n_episodes, max_steps,
 
         # add new policies to the pool
         pool = pool + crossovered + mutated
-        pool_scores = list(map(lambda x: evaluate(env, x, t_max=max_steps), pool))
+        pool_scores = list(map(lambda x: evaluate(sample_func, env, x), pool))
 
         # select pool_size best policies
         selected_indices = np.argsort(pool_scores)[-pool_size:]
