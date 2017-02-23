@@ -90,7 +90,9 @@ class Estimator(object):
 
     def _vectorise_state(self, states):
         obs_shape = states.shape
-        if len(obs_shape) > 2:
+        if len(obs_shape) < 2:  # just one observation
+            states = np.expand_dims(states, 0)
+        elif len(obs_shape) > 2:  # some many states magic
             states = states.reshape((obs_shape[0], -1))
         return states
 
@@ -98,10 +100,13 @@ class Estimator(object):
         """
         Returns the featurized representation for a state.
         """
-        state = self._vectorise_state(np.array([state]))
+        state = self._vectorise_state(state)
         scaled = self.scaler.transform(state)
         featurized = self.featurizer.transform(scaled)
-        return featurized[0]
+        if featurized.shape[0] == 1:
+            return featurized[0]
+        else:
+            return featurized
 
     def predict_proba(self, s):
         features = self.featurize_state(s)
@@ -109,10 +114,7 @@ class Estimator(object):
 
     def update(self, s, y):
         features = self.featurize_state(s)
-        if hasattr(y, "shape"):
-            self.model.partial_fit(features, y)
-        else:
-            self.model.partial_fit([features], [y])
+        self.model.partial_fit(features, y)
 
 
 def generate_session(env, agent, t_max=int(1e4)):
@@ -183,6 +185,9 @@ def cem(env, agent, num_episodes, max_steps=int(1e4),
             elite_actions = np.hstack((elite_actions, list(range(agent.n_actions))))
             agent.update(elite_states, elite_actions)
 
+        tr.set_description(
+            "mean reward = %.5f\tthreshold = %.1f"%(np.mean(batch_rewards),threshold))
+
     return history
 
 
@@ -194,7 +199,7 @@ def _parse_args():
                         help='The environment to use')
     parser.add_argument('--num_episodes',
                         type=int,
-                        default=1000,
+                        default=200,
                         help='Number of episodes')
     parser.add_argument('--max_steps',
                         type=int,
