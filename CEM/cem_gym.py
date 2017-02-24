@@ -94,7 +94,7 @@ class Estimator(object):
         self.model.partial_fit(features, y)
 
 
-def generate_session(env, agent, t_max=int(1e6)):
+def generate_session(env, agent, t_max=int(1e5)):
     states, actions = [], []
     total_reward = 0
 
@@ -124,7 +124,7 @@ glob_env = None
 glob_agent = None
 
 
-def generate_parallel_session(t_max=int(1e6)):
+def generate_parallel_session(t_max=int(1e5)):
     states, actions = [], []
     total_reward = 0
 
@@ -157,6 +157,7 @@ def generate_parallel_sessions(n, t_max, n_jobs=-1):
 
 def cem(env, agent, num_episodes, max_steps=int(1e6),
         n_samples=200, percentile=50, n_jobs=-1, verbose=False):
+    global glob_env, glob_agent
     init_n_samples = n_samples
     final_n_samples = n_samples // 5
     plays_to_decay = num_episodes // 2
@@ -181,8 +182,9 @@ def cem(env, agent, num_episodes, max_steps=int(1e6),
 
     for i in tr:
         # generate new sessions
-        sessions = generate_parallel_sessions(n_samples, n_jobs, max_steps)
-        n_samples -= (init_n_samples - final_n_samples) // plays_to_decay
+        sessions = generate_parallel_sessions(n_samples, max_steps, n_jobs)
+        if i < plays_to_decay:
+            n_samples -= (init_n_samples - final_n_samples) // plays_to_decay
 
         batch_states, batch_actions, batch_rewards, batch_steps = map(np.array, zip(*sessions))
         # batch_states: a list of lists of states in each session
@@ -227,7 +229,7 @@ def _parse_args():
     parser = argparse.ArgumentParser(description='Policy iteration example')
     parser.add_argument('--env',
                         type=str,
-                        default='LunarLander-v2',  # CartPole-v0, MountainCar-v0, LunarLander-v2
+                        default='CartPole-v0',  # CartPole-v0, MountainCar-v0, LunarLander-v2
                         help='The environment to use')
     parser.add_argument('--num_episodes',
                         type=int,
@@ -235,7 +237,7 @@ def _parse_args():
                         help='Number of episodes')
     parser.add_argument('--max_steps',
                         type=int,
-                        default=int(1e6),
+                        default=int(1e5),
                         help='Number of steps per episode')
     parser.add_argument('--n_samples',
                         type=int,
@@ -270,7 +272,7 @@ def save_stats(stats, save_dir="./"):
         plot_unimetric(stats, key, save_dir)
 
 
-def run(env, n_episodes=200, max_steps=int(1e6), n_samples=1000,
+def run(env, n_episodes=200, max_steps=int(1e5), n_samples=1000,
         percentile=80, features=False, layers=None,
         verbose=False, plot_stats=False, api_key=None):
     env_name = env
