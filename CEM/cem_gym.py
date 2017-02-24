@@ -162,8 +162,8 @@ def cem(env, agent, num_episodes, max_steps=int(1e6),
     final_n_samples = n_samples // 5
     plays_to_decay = num_episodes // 2
 
-    elite_states_deque = collections.deque(maxlen=1000)
-    elite_actions_deque = collections.deque(maxlen=1000)
+    elite_states_deque = collections.deque(maxlen=int(final_n_samples * 2.5))
+    elite_actions_deque = collections.deque(maxlen=int(final_n_samples * 2.5))
 
     glob_env = env  # NEVER DO LIKE THIS PLEASE!
     glob_agent = agent
