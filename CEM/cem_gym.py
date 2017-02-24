@@ -162,8 +162,9 @@ def cem(env, agent, num_episodes, max_steps=int(1e6),
     final_n_samples = n_samples // 5
     plays_to_decay = num_episodes // 2
 
-    elite_states_deque = collections.deque(maxlen=int(final_n_samples * 2.5))
-    elite_actions_deque = collections.deque(maxlen=int(final_n_samples * 2.5))
+    states_deque = collections.deque(maxlen=int(init_n_samples * 2))
+    actions_deque = collections.deque(maxlen=int(init_n_samples * 2))
+    rewards_deque = collections.deque(maxlen=int(init_n_samples * 2))
 
     glob_env = env  # NEVER DO LIKE THIS PLEASE!
     glob_agent = agent
@@ -190,6 +191,13 @@ def cem(env, agent, num_episodes, max_steps=int(1e6),
         # batch_states: a list of lists of states in each session
         # batch_actions: a list of lists of actions in each session
         # batch_rewards: a list of floats - total rewards at each session
+        states_deque.extend(batch_states)
+        actions_deque.extend(batch_actions)
+        rewards_deque.extend(batch_rewards)
+
+        batch_states = np.array(states_deque)
+        batch_actions = np.array(actions_deque)
+        batch_rewards = np.array(rewards_deque)
 
         threshold = np.percentile(batch_rewards, percentile)
 
@@ -197,26 +205,26 @@ def cem(env, agent, num_episodes, max_steps=int(1e6),
         history["reward"][i] = np.mean(batch_rewards)
         history["n_steps"][i] = np.mean(batch_steps)
 
-        elite_states = batch_states[batch_rewards >= threshold]
-        elite_actions = batch_actions[batch_rewards >= threshold]
+        # look like > better, cause >= refer to reuse of bad examples
+        if i < plays_to_decay:
+            elite_states = batch_states[batch_rewards > threshold]
+            elite_actions = batch_actions[batch_rewards > threshold]
+        else:
+            elite_states = batch_states[batch_rewards >= threshold]
+            elite_actions = batch_actions[batch_rewards >= threshold]
 
-        elite_states, elite_actions = map(np.concatenate, [elite_states, elite_actions])
-        # elite_states: a list of states from top games
-        # elite_actions: a list of actions from top games
-        elite_states_deque.extend(elite_states)
-        elite_actions_deque.extend(elite_actions)
-
-        elite_states = list(elite_states_deque)
-        elite_actions = list(elite_actions_deque)
-
-        try:
-            agent.fit(elite_states, elite_actions)
-        except:
-            # just a hack
-            addition = np.array([env.reset()] * env.action_space.n)
-            elite_states = np.vstack((elite_states, addition))
-            elite_actions = np.hstack((elite_actions, list(range(env.action_space.n))))
-            agent.fit(elite_states, elite_actions)
+        if len(elite_actions) > 0:
+            elite_states, elite_actions = map(np.concatenate, [elite_states, elite_actions])
+            # elite_states: a list of states from top games
+            # elite_actions: a list of actions from top games
+            try:
+                agent.fit(elite_states, elite_actions)
+            except:
+                # just a hack
+                addition = np.array([env.reset()] * env.action_space.n)
+                elite_states = np.vstack((elite_states, addition))
+                elite_actions = np.hstack((elite_actions, list(range(env.action_space.n))))
+                agent.fit(elite_states, elite_actions)
 
         tr.set_description(
             "mean reward = {:.3f}\tthreshold = {:.3f}".format(
@@ -265,6 +273,9 @@ def _parse_args():
     parser.add_argument('--n_jobs',
                         type=int,
                         default=-1)
+    parser.add_argument('--seed',
+                        type=int,
+                        default=42)
 
     args, _ = parser.parse_known_args()
     return args
@@ -277,7 +288,7 @@ def save_stats(stats, save_dir="./"):
 
 def run(env, n_episodes=200, max_steps=int(1e5), n_samples=1000,
         percentile=80, features=False, layers=None,
-        verbose=False, plot_stats=False, api_key=None, n_jobs=-1):
+        verbose=False, plot_stats=False, api_key=None, n_jobs=-1, seed=42):
     env_name = env
     if env_name == "MountainCar-v0":
         env = gym.make(env).env
@@ -295,6 +306,9 @@ def run(env, n_episodes=200, max_steps=int(1e5), n_samples=1000,
                               max_iter=1)
         agent.fit([env.reset()] * env.action_space.n, range(env.action_space.n))
 
+    env.seed(seed)
+    np.random.seed(seed)
+
     stats = cem(env, agent, n_episodes,
                 max_steps=max_steps,
                 n_samples=n_samples, percentile=percentile,
@@ -307,7 +321,6 @@ def run(env, n_episodes=200, max_steps=int(1e5), n_samples=1000,
         sessions = [generate_session(env, agent, int(1e10)) for _ in range(200)]
         env.close()
         # unwrap
-        env = env.env.env
         gym.upload("/tmp/" + env_name, api_key=api_key)
 
 
@@ -319,7 +332,7 @@ def main():
         layers = None
     run(args.env, args.num_episodes, args.max_steps, args.n_samples,
         args.percentile, args.features, layers,
-        args.verbose, args.plot_stats, args.api_key, args.n_jobs)
+        args.verbose, args.plot_stats, args.api_key, args.n_jobs, args.seed)
 
 
 if __name__ == '__main__':
