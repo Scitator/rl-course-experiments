@@ -262,6 +262,9 @@ def _parse_args():
     parser.add_argument('--api_key',
                         type=str,
                         default=None)
+    parser.add_argument('--n_jobs',
+                        type=int,
+                        default=-1)
 
     args, _ = parser.parse_known_args()
     return args
@@ -274,7 +277,7 @@ def save_stats(stats, save_dir="./"):
 
 def run(env, n_episodes=200, max_steps=int(1e5), n_samples=1000,
         percentile=80, features=False, layers=None,
-        verbose=False, plot_stats=False, api_key=None):
+        verbose=False, plot_stats=False, api_key=None, n_jobs=-1):
     env_name = env
     if env_name == "MountainCar-v0":
         env = gym.make(env).env
@@ -295,7 +298,7 @@ def run(env, n_episodes=200, max_steps=int(1e5), n_samples=1000,
     stats = cem(env, agent, n_episodes,
                 max_steps=max_steps,
                 n_samples=n_samples, percentile=percentile,
-                verbose=verbose)
+                n_jobs=n_jobs, verbose=verbose)
     if plot_stats:
         save_stats(stats)
 
@@ -316,7 +319,7 @@ def main():
         layers = None
     run(args.env, args.num_episodes, args.max_steps, args.n_samples,
         args.percentile, args.features, layers,
-        args.verbose, args.plot_stats, args.api_key)
+        args.verbose, args.plot_stats, args.api_key, args.n_jobs)
 
 
 if __name__ == '__main__':
