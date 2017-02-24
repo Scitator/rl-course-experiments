@@ -118,6 +118,8 @@ def generate_session(env, agent, t_max=int(1e5)):
         if done:
             break
 
+    total_reward -= t * 0.01
+
     return states, actions, total_reward, t
 
 glob_env = None
@@ -147,6 +149,8 @@ def generate_parallel_session(t_max=int(1e5)):
         s = new_s
         if done:
             break
+
+    total_reward -= t * 0.01
 
     return states, actions, total_reward, t
 
@@ -178,7 +182,7 @@ def cem(env, agent, num_episodes, max_steps=int(1e6),
 
     tr = trange(
         num_episodes,
-        desc="mean reward = {:.3f}\tthreshold = {:.3f}".format(0.0, 0.0),
+        desc="mean reward = {:.3f}\tthreshold = {:.3f}\tmean n_steps = {:.3f}".format(0.0, 0.0, 0.0),
         leave=True)
 
     for i in tr:
@@ -227,8 +231,9 @@ def cem(env, agent, num_episodes, max_steps=int(1e6),
                 agent.fit(elite_states, elite_actions)
 
         tr.set_description(
-            "mean reward = {:.3f}\tthreshold = {:.3f}".format(
-                np.mean(batch_rewards), threshold))
+            "mean reward = {:.3f}\tthreshold = {:.3f}\tmean n_steps = {:.3f}".format(
+                np.mean(batch_rewards) + 0.01 * np.mean(batch_steps),
+                threshold, np.mean(batch_steps)))
 
     return history
 
