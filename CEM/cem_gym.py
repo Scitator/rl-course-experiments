@@ -2,16 +2,18 @@
 
 import gym
 from gym import wrappers
-import sys
 import argparse
 import numpy as np
 from tqdm import trange
+from joblib import Parallel, delayed
+import collections
 import sklearn.pipeline
 import sklearn.preprocessing
 from sklearn.neural_network import MLPClassifier
 from sklearn.kernel_approximation import RBFSampler
 
 from matplotlib import pyplot as plt
+
 plt.style.use("ggplot")
 
 
@@ -30,11 +32,11 @@ class Estimator(object):
     Value Function approximator.
     """
 
-    def __init__(self, env):
+    def __init__(self, env, layers):
         self.n_actions = env.action_space.n
         self._prepare_estimator_for_env(env)
         self.model = MLPClassifier(
-            hidden_layer_sizes=(50, 50, 50, 50, 50),
+            hidden_layer_sizes=layers,
             activation='tanh',
             warm_start=True,
             max_iter=1)
@@ -85,14 +87,14 @@ class Estimator(object):
 
     def predict_proba(self, s):
         features = self.featurize_state(s)
-        return self.model.predict_proba([features])[0]
+        return self.model.predict_proba([features])
 
-    def update(self, s, y):
+    def fit(self, s, y):
         features = self.featurize_state(s)
         self.model.partial_fit(features, y)
 
 
-def generate_session(env, agent, t_max=int(1e4)):
+def generate_session(env, agent, t_max=int(1e6)):
     states, actions = [], []
     total_reward = 0
 
@@ -101,7 +103,7 @@ def generate_session(env, agent, t_max=int(1e4)):
     for t in range(t_max):
 
         # predict array of action probabilities
-        probs = agent.predict_proba(s)
+        probs = agent.predict_proba([s])[0]
 
         a = np.random.choice(env.action_space.n, p=probs)
 
@@ -115,35 +117,83 @@ def generate_session(env, agent, t_max=int(1e4)):
         s = new_s
         if done:
             break
-    return states, actions, total_reward
+
+    return states, actions, total_reward, t
+
+glob_env = None
+glob_agent = None
 
 
-def cem(env, agent, num_episodes, max_steps=int(1e4),
-        n_samples=200, percentile=50, verbose=False):
+def generate_parallel_session(t_max=int(1e6)):
+    states, actions = [], []
+    total_reward = 0
+
+    s = glob_env.reset()
+
+    for t in range(t_max):
+
+        # predict array of action probabilities
+        probs = glob_agent.predict_proba([s])[0]
+
+        a = np.random.choice(glob_env.action_space.n, p=probs)
+
+        new_s, r, done, info = glob_env.step(a)
+
+        # record sessions like you did before
+        states.append(s)
+        actions.append(a)
+        total_reward += r
+
+        s = new_s
+        if done:
+            break
+
+    return states, actions, total_reward, t
+
+
+def generate_parallel_sessions(n, t_max, n_jobs=-1):
+    return Parallel(n_jobs)(n * [delayed(generate_parallel_session)(t_max)])
+
+
+def cem(env, agent, num_episodes, max_steps=int(1e6),
+        n_samples=200, percentile=50, n_jobs=-1, verbose=False):
+    init_n_samples = n_samples
+    final_n_samples = n_samples // 5
+    plays_to_decay = num_episodes // 2
+
+    elite_states_deque = collections.deque(maxlen=1000)
+    elite_actions_deque = collections.deque(maxlen=1000)
+
+    glob_env = env  # NEVER DO LIKE THIS PLEASE!
+    glob_agent = agent
 
     # Keeps track of useful statistics
     history = {
         "threshold": np.zeros(num_episodes),
         "reward": np.zeros(num_episodes),
+        "n_steps": np.zeros(num_episodes),
     }
 
     tr = trange(
         num_episodes,
-        desc="mean reward = %.5f\tthreshold = %.1f" % (0.0, 0.0),
+        desc="mean reward = {:.3f}\tthreshold = {:.3f}".format(0.0, 0.0),
         leave=True)
 
-    for i_episode in tr:
-        # Print out which episode we're on, useful for debugging.
-        # Also print reward for last episode
+    for i in tr:
+        # generate new sessions
+        sessions = generate_parallel_sessions(n_samples, n_jobs, max_steps)
+        n_samples -= (init_n_samples - final_n_samples) // plays_to_decay
 
-        sessions = [generate_session(env, agent, max_steps) for _ in range(n_samples)]
-
-        batch_states, batch_actions, batch_rewards = map(np.array, zip(*sessions))
+        batch_states, batch_actions, batch_rewards, batch_steps = map(np.array, zip(*sessions))
+        # batch_states: a list of lists of states in each session
+        # batch_actions: a list of lists of actions in each session
+        # batch_rewards: a list of floats - total rewards at each session
 
         threshold = np.percentile(batch_rewards, percentile)
 
-        history["threshold"][i_episode] = threshold
-        history["reward"][i_episode] = np.mean(batch_rewards)
+        history["threshold"][i] = threshold
+        history["reward"][i] = np.mean(batch_rewards)
+        history["n_steps"][i] = np.mean(batch_steps)
 
         elite_states = batch_states[batch_rewards >= threshold]
         elite_actions = batch_actions[batch_rewards >= threshold]
@@ -151,18 +201,24 @@ def cem(env, agent, num_episodes, max_steps=int(1e4),
         elite_states, elite_actions = map(np.concatenate, [elite_states, elite_actions])
         # elite_states: a list of states from top games
         # elite_actions: a list of actions from top games
+        elite_states_deque.extend(elite_states)
+        elite_actions_deque.extend(elite_actions)
+
+        elite_states = list(elite_states_deque)
+        elite_actions = list(elite_actions_deque)
 
         try:
-            agent.update(elite_states, elite_actions)
+            agent.fit(elite_states, elite_actions)
         except:
-            # just a hack, because of some sklearn MLP problems
-            addition = np.array([env.reset()] * agent.n_actions)
+            # just a hack
+            addition = np.array([env.reset()] * env.action_space.n)
             elite_states = np.vstack((elite_states, addition))
-            elite_actions = np.hstack((elite_actions, list(range(agent.n_actions))))
-            agent.update(elite_states, elite_actions)
+            elite_actions = np.hstack((elite_actions, list(range(env.action_space.n))))
+            agent.fit(elite_states, elite_actions)
 
         tr.set_description(
-            "mean reward = %.5f\tthreshold = %.1f"%(np.mean(batch_rewards),threshold))
+            "mean reward = {:.3f}\tthreshold = {:.3f}".format(
+                np.mean(batch_rewards), threshold))
 
     return history
 
@@ -171,7 +227,7 @@ def _parse_args():
     parser = argparse.ArgumentParser(description='Policy iteration example')
     parser.add_argument('--env',
                         type=str,
-                        default='MountainCar-v0',  # CartPole-v0, MountainCar-v0
+                        default='LunarLander-v2',  # CartPole-v0, MountainCar-v0, LunarLander-v2
                         help='The environment to use')
     parser.add_argument('--num_episodes',
                         type=int,
@@ -179,15 +235,15 @@ def _parse_args():
                         help='Number of episodes')
     parser.add_argument('--max_steps',
                         type=int,
-                        default=16000,
+                        default=int(1e6),
                         help='Number of steps per episode')
     parser.add_argument('--n_samples',
                         type=int,
-                        default=200,
+                        default=1000,
                         help='Games per epoch')
     parser.add_argument('--percentile',
                         type=int,
-                        default=50,
+                        default=80,
                         help='percentile')
     parser.add_argument('--verbose',
                         action='store_true',
@@ -195,6 +251,12 @@ def _parse_args():
     parser.add_argument('--plot_stats',
                         action='store_true',
                         default=False)
+    parser.add_argument('--features',
+                        action='store_true',
+                        default=False)
+    parser.add_argument('--layers',
+                        type=str,
+                        default=None)
     parser.add_argument('--api_key',
                         type=str,
                         default=None)
@@ -208,17 +270,27 @@ def save_stats(stats, save_dir="./"):
         plot_unimetric(stats, key, save_dir)
 
 
-def run(env, n_episodes, max_steps=int(1e4), n_samples=200,
-        percentile=50, verbose=False, plot_stats=False, api_key=None):
+def run(env, n_episodes=200, max_steps=int(1e6), n_samples=1000,
+        percentile=80, features=False, layers=None,
+        verbose=False, plot_stats=False, api_key=None):
     env_name = env
-    env = gym.make(env)
+    if env_name == "MountainCar-v0":
+        env = gym.make(env).env
+        layers = layers or (20, 10, 20)
+    else:
+        env = gym.make(env)
+        layers = layers or (256, 256, 128)
 
-    estimator = Estimator(env)
+    if features:
+        agent = Estimator(env, layers)
+    else:
+        agent = MLPClassifier(hidden_layer_sizes=layers,
+                              activation='tanh',
+                              warm_start=True,
+                              max_iter=1)
+        agent.fit([env.reset()] * env.action_space.n, range(env.action_space.n))
 
-    if api_key is not None:
-        env = gym.wrappers.Monitor(env, "/tmp/" + env_name, force=True)
-
-    stats = cem(env, estimator, n_episodes,
+    stats = cem(env, agent, n_episodes,
                 max_steps=max_steps,
                 n_samples=n_samples, percentile=percentile,
                 verbose=verbose)
@@ -226,14 +298,23 @@ def run(env, n_episodes, max_steps=int(1e4), n_samples=200,
         save_stats(stats)
 
     if api_key is not None:
+        env = gym.wrappers.Monitor(env, "/tmp/" + env_name, force=True)
+        sessions = [generate_session(env, agent, int(1e10)) for _ in range(200)]
         env.close()
+        # unwrap
+        env = env.env.env
         gym.upload("/tmp/" + env_name, api_key=api_key)
 
 
 def main():
     args = _parse_args()
+    try:
+        layers = tuple(map(int, args.layers.split("-")))
+    except:
+        layers = None
     run(args.env, args.num_episodes, args.max_steps, args.n_samples,
-        args.percentile, args.verbose, args.plot_stats, args.api_key)
+        args.percentile, args.features, layers,
+        args.verbose, args.plot_stats, args.api_key)
 
 
 if __name__ == '__main__':
