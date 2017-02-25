@@ -2,16 +2,13 @@
 
 import gym
 from gym import wrappers
-import argparse
 import pickle
+import argparse
 import numpy as np
 from tqdm import trange
 from joblib import Parallel, delayed
 import collections
-import sklearn.pipeline
-import sklearn.preprocessing
-from sklearn.neural_network import MLPClassifier
-from sklearn.kernel_approximation import RBFSampler
+from sklearn.neural_network import MLPRegressor
 
 from matplotlib import pyplot as plt
 
@@ -28,73 +25,6 @@ def plot_unimetric(history, metric, save_dir):
                 format='png', dpi=300)
 
 
-class Estimator(object):
-    """
-    Value Function approximator.
-    """
-
-    def __init__(self, env, layers):
-        self.n_actions = env.action_space.n
-        self._prepare_estimator_for_env(env)
-        self.model = MLPClassifier(
-            hidden_layer_sizes=layers,
-            activation='tanh',
-            warm_start=True,
-            max_iter=1)
-        # We need to call partial_fit once to initialize the model
-        # or we get a NotFittedError when trying to make a prediction
-        # This is quite hacky.
-        self.model.fit(
-            [self.featurize_state(env.reset())] * self.n_actions,
-            range(self.n_actions))
-
-    def _prepare_estimator_for_env(self, env):
-        observation_examples = np.array(
-            [env.observation_space.sample() for _ in range(10000)])
-        observation_examples = self._vectorise_state(observation_examples)
-
-        scaler = sklearn.preprocessing.StandardScaler()
-        scaler.fit(observation_examples)
-        self.scaler = scaler
-
-        featurizer = sklearn.pipeline.FeatureUnion([
-            ("rbf1", RBFSampler(gamma=5.0, n_components=100)),
-            ("rbf2", RBFSampler(gamma=2.0, n_components=100)),
-            ("rbf3", RBFSampler(gamma=1.0, n_components=100)),
-            ("rbf4", RBFSampler(gamma=0.5, n_components=100))
-        ])
-        featurizer.fit(scaler.transform(observation_examples))
-        self.featurizer = featurizer
-
-    def _vectorise_state(self, states):
-        obs_shape = states.shape
-        if len(obs_shape) < 2:  # just one observation
-            states = np.expand_dims(states, 0)
-        elif len(obs_shape) > 2:  # some many states magic
-            states = states.reshape((obs_shape[0], -1))
-        return states
-
-    def featurize_state(self, state):
-        """
-        Returns the featurized representation for a state.
-        """
-        state = self._vectorise_state(state)
-        scaled = self.scaler.transform(state)
-        featurized = self.featurizer.transform(scaled)
-        if featurized.shape[0] == 1:
-            return featurized[0]
-        else:
-            return featurized
-
-    def predict_proba(self, s):
-        features = self.featurize_state(s)
-        return self.model.predict_proba([features])
-
-    def fit(self, s, y):
-        features = self.featurize_state(s)
-        self.model.partial_fit(features, y)
-
-
 def generate_session(env, agent, t_max=int(1e5), step_penalty=0.01):
     states, actions = [], []
     total_reward = 0
@@ -102,11 +32,7 @@ def generate_session(env, agent, t_max=int(1e5), step_penalty=0.01):
     s = env.reset()
 
     for t in range(t_max):
-
-        # predict array of action probabilities
-        probs = agent.predict_proba([s])[0]
-
-        a = np.random.choice(env.action_space.n, p=probs)
+        a = agent.predict([s])
 
         new_s, r, done, info = env.step(a)
 
@@ -135,11 +61,7 @@ def generate_parallel_session(t_max=int(1e5), step_penalty=0.01):
     s = glob_env.reset()
 
     for t in range(t_max):
-
-        # predict array of action probabilities
-        probs = glob_agent.predict_proba([s])[0]
-
-        a = np.random.choice(glob_env.action_space.n, p=probs)
+        a = glob_agent.predict([s])
 
         new_s, r, done, info = glob_env.step(a)
 
@@ -190,6 +112,9 @@ def cem(env, agent, num_episodes, max_steps=int(1e6), step_penalty=0.01,
 
     for i in tr:
         # generate new sessions
+        # sessions = [
+        #     generate_session(env, agent, max_steps, step_penalty)
+        #     for _ in range(n_samples)]
         sessions = generate_parallel_sessions(n_samples, max_steps, step_penalty, n_jobs)
         if i < plays_to_decay:
             n_samples -= (init_n_samples - final_n_samples) // plays_to_decay
@@ -245,7 +170,7 @@ def _parse_args():
     parser = argparse.ArgumentParser(description='Policy iteration example')
     parser.add_argument('--env',
                         type=str,
-                        default='CartPole-v0',  # CartPole-v0, MountainCar-v0, LunarLander-v2
+                        default='MountainCarContinuous-v0',  # MountainCar-v0, LunarLander-v2
                         help='The environment to use')
     parser.add_argument('--num_episodes',
                         type=int,
@@ -270,9 +195,6 @@ def _parse_args():
                         action='store_true',
                         default=False)
     parser.add_argument('--plot_stats',
-                        action='store_true',
-                        default=False)
-    parser.add_argument('--features',
                         action='store_true',
                         default=False)
     parser.add_argument('--layers',
@@ -301,25 +223,21 @@ def save_stats(stats, save_dir="./"):
 
 
 def run(env, n_episodes=200, max_steps=int(1e5), n_samples=1000, step_penalty=0.01,
-        percentile=80, features=False, layers=None,
+        percentile=80, layers=None,
         verbose=False, plot_stats=False, api_key=None, n_jobs=-1, seed=42, resume=False):
     env_name = env
-    if env_name == "MountainCar-v0":
+    if env_name == "MountainCarContinuous-v0":
         env = gym.make(env).env
-        layers = layers or (20, 10, 20)
     else:
         env = gym.make(env)
-        layers = layers or (256, 256, 128)
+    layers = layers or (256, 256, 128)
 
-    if features:
-        agent = Estimator(env, layers)
-    else:
-        agent = MLPClassifier(
-            hidden_layer_sizes=layers,
-            activation='tanh',
-            warm_start=True,
-            max_iter=1)
-        agent.fit([env.reset()] * env.action_space.n, range(env.action_space.n))
+    agent = MLPRegressor(
+        hidden_layer_sizes=layers,
+        activation='tanh',
+        warm_start=True,
+        max_iter=1)
+    agent.fit(env.observation_space.sample(), env.action_space.sample())
 
     if resume:
         agent = pickle.load(open("agent.pkl", "rb"))
@@ -350,7 +268,7 @@ def main():
     except:
         layers = None
     run(args.env, args.num_episodes, args.max_steps, args.n_samples, args.step_penalty,
-        args.percentile, args.features, layers,
+        args.percentile, layers,
         args.verbose, args.plot_stats, args.api_key, args.n_jobs, args.seed, args.resume)
 
 
