@@ -326,7 +326,7 @@ def run(env, n_episodes=200, max_steps=int(1e5), n_samples=1000, step_penalty=0.
 
     if api_key is not None:
         env = gym.wrappers.Monitor(env, "/tmp/" + env_name, force=True)
-        sessions = [generate_session(env, agent, int(1e10), 0.0) for _ in range(300)]
+        sessions = [generate_session(env, agent, int(1e10), 0.0) for _ in range(1000)]
         env.close()
         # unwrap
         gym.upload("/tmp/" + env_name, api_key=api_key)
