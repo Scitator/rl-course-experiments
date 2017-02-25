@@ -94,7 +94,7 @@ class Estimator(object):
         self.model.partial_fit(features, y)
 
 
-def generate_session(env, agent, t_max=int(1e5)):
+def generate_session(env, agent, t_max=int(1e5), step_penalty=0.01):
     states, actions = [], []
     total_reward = 0
 
@@ -118,7 +118,7 @@ def generate_session(env, agent, t_max=int(1e5)):
         if done:
             break
 
-    total_reward -= t * 0.01
+    total_reward -= t * step_penalty
 
     return states, actions, total_reward, t
 
@@ -126,7 +126,7 @@ glob_env = None
 glob_agent = None
 
 
-def generate_parallel_session(t_max=int(1e5)):
+def generate_parallel_session(t_max=int(1e5), step_penalty=0.01):
     states, actions = [], []
     total_reward = 0
 
@@ -150,16 +150,16 @@ def generate_parallel_session(t_max=int(1e5)):
         if done:
             break
 
-    total_reward -= t * 0.01
+    total_reward -= t * step_penalty
 
     return states, actions, total_reward, t
 
 
-def generate_parallel_sessions(n, t_max, n_jobs=-1):
-    return Parallel(n_jobs)(n * [delayed(generate_parallel_session)(t_max)])
+def generate_parallel_sessions(n, t_max, step_penalty, n_jobs=-1):
+    return Parallel(n_jobs)(n * [delayed(generate_parallel_session)(t_max, step_penalty)])
 
 
-def cem(env, agent, num_episodes, max_steps=int(1e6),
+def cem(env, agent, num_episodes, max_steps=int(1e6), step_penalty=0.01,
         n_samples=200, percentile=50, n_jobs=-1, verbose=False):
     global glob_env, glob_agent
     init_n_samples = n_samples
@@ -187,7 +187,7 @@ def cem(env, agent, num_episodes, max_steps=int(1e6),
 
     for i in tr:
         # generate new sessions
-        sessions = generate_parallel_sessions(n_samples, max_steps, n_jobs)
+        sessions = generate_parallel_sessions(n_samples, max_steps, step_penalty, n_jobs)
         if i < plays_to_decay:
             n_samples -= (init_n_samples - final_n_samples) // plays_to_decay
 
@@ -232,7 +232,7 @@ def cem(env, agent, num_episodes, max_steps=int(1e6),
 
         tr.set_description(
             "mean reward = {:.3f}\tthreshold = {:.3f}\tmean n_steps = {:.3f}".format(
-                np.mean(batch_rewards) + 0.01 * np.mean(batch_steps),
+                np.mean(batch_rewards) + step_penalty * np.mean(batch_steps),
                 threshold, np.mean(batch_steps)))
 
     return history
@@ -256,6 +256,9 @@ def _parse_args():
                         type=int,
                         default=1000,
                         help='Games per epoch')
+    parser.add_argument('--step_penalty',
+                        type=float,
+                        default=0.01)
     parser.add_argument('--percentile',
                         type=int,
                         default=80,
@@ -291,7 +294,7 @@ def save_stats(stats, save_dir="./"):
         plot_unimetric(stats, key, save_dir)
 
 
-def run(env, n_episodes=200, max_steps=int(1e5), n_samples=1000,
+def run(env, n_episodes=200, max_steps=int(1e5), n_samples=1000, step_penalty=0.01,
         percentile=80, features=False, layers=None,
         verbose=False, plot_stats=False, api_key=None, n_jobs=-1, seed=42):
     env_name = env
@@ -315,7 +318,7 @@ def run(env, n_episodes=200, max_steps=int(1e5), n_samples=1000,
     np.random.seed(seed)
 
     stats = cem(env, agent, n_episodes,
-                max_steps=max_steps,
+                max_steps=max_steps, step_penalty=step_penalty,
                 n_samples=n_samples, percentile=percentile,
                 n_jobs=n_jobs, verbose=verbose)
     if plot_stats:
@@ -323,7 +326,7 @@ def run(env, n_episodes=200, max_steps=int(1e5), n_samples=1000,
 
     if api_key is not None:
         env = gym.wrappers.Monitor(env, "/tmp/" + env_name, force=True)
-        sessions = [generate_session(env, agent, int(1e10)) for _ in range(200)]
+        sessions = [generate_session(env, agent, int(1e10), 0.0) for _ in range(300)]
         env.close()
         # unwrap
         gym.upload("/tmp/" + env_name, api_key=api_key)
@@ -335,7 +338,7 @@ def main():
         layers = tuple(map(int, args.layers.split("-")))
     except:
         layers = None
-    run(args.env, args.num_episodes, args.max_steps, args.n_samples,
+    run(args.env, args.num_episodes, args.max_steps, args.n_samples, args.step_penalty,
         args.percentile, args.features, layers,
         args.verbose, args.plot_stats, args.api_key, args.n_jobs, args.seed)
 
