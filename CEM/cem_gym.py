@@ -184,8 +184,8 @@ def cem(env, agent, num_episodes, max_steps=int(1e6), step_penalty=0.01,
 
     tr = trange(
         num_episodes,
-        desc="mean reward = {:.3f}\tthreshold = {:.3f}\tmean n_steps = {:.3f}".format(0.0, 0.0,
-                                                                                      0.0),
+        desc="mean reward = {:.3f}\tthreshold = {:.3f}\tmean n_steps = {:.3f}".format(
+            0.0, 0.0, 0.0),
         leave=True)
 
     for i in tr:

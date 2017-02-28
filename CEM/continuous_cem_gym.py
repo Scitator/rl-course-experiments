@@ -32,7 +32,12 @@ def generate_session(env, agent, t_max=int(1e5), step_penalty=0.01):
     s = env.reset()
 
     for t in range(t_max):
-        a = agent.predict([s])
+        a = agent.predict([s])[0]
+        a = np.array(list(map(
+            lambda x: min(
+                max(x[1], env.action_space.low[x[0]]),
+                env.action_space.high[x[0]]),
+            enumerate(a))))
 
         new_s, r, done, info = env.step(a)
 
@@ -61,7 +66,12 @@ def generate_parallel_session(t_max=int(1e5), step_penalty=0.01):
     s = glob_env.reset()
 
     for t in range(t_max):
-        a = glob_agent.predict([s])
+        a = glob_agent.predict([s])[0]
+        a = np.array(list(map(
+            lambda x: min(
+                max(x[1], glob_env.action_space.low[x[0]]),
+                glob_env.action_space.high[x[0]]),
+            enumerate(a))))
 
         new_s, r, done, info = glob_env.step(a)
 
@@ -237,7 +247,9 @@ def run(env, n_episodes=200, max_steps=int(1e5), n_samples=1000, step_penalty=0.
         activation='tanh',
         warm_start=True,
         max_iter=1)
-    agent.fit(env.observation_space.sample(), env.action_space.sample())
+    agent.fit(
+        np.zeros(env.observation_space.shape).reshape(1, -1),
+        np.zeros(env.action_space.shape).reshape(1, -1))
 
     if resume:
         agent = pickle.load(open("agent.pkl", "rb"))
