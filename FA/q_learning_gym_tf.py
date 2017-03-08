@@ -11,6 +11,7 @@ from tqdm import trange
 import collections
 
 from matplotlib import pyplot as plt
+
 plt.style.use("ggplot")
 
 
@@ -53,23 +54,24 @@ class DqnAgent(object):
         self.is_end = tf.placeholder(shape=[None], dtype=tf.bool)
 
         scope = self.special.get("scope", "network")
-        
+
         self.predicted_qvalues = self.qnetwork(network, self.current_states, scope=scope)
 
         one_hot_actions = tf.one_hot(self.actions, n_actions)
         predicted_qvalues_for_actions = tf.reduce_sum(
             tf.multiply(self.predicted_qvalues, one_hot_actions),
             axis=-1)
-        predicted_next_qvalues =self.qnetwork(network, self.next_states, scope=scope, reuse=True)
+        predicted_next_qvalues = self.qnetwork(network, self.next_states, scope=scope, reuse=True)
 
         target_qvalues_for_actions = self.rewards + \
-            gamma * tf.reduce_max(predicted_next_qvalues, axis=-1)
+                                     gamma * tf.reduce_max(predicted_next_qvalues, axis=-1)
         target_qvalues_for_actions = tf.where(
             self.is_end,
-            tf.zeros_like(target_qvalues_for_actions),
+            self.rewards,  # tf.zeros_like(target_qvalues_for_actions),
             target_qvalues_for_actions)
 
-        self.loss = tf.reduce_mean(tf.square(target_qvalues_for_actions - predicted_qvalues_for_actions))
+        self.loss = tf.reduce_mean(
+            tf.square(target_qvalues_for_actions - predicted_qvalues_for_actions))
 
         self.update_step = tf.train.AdamOptimizer(1e-4).minimize(
             self.loss, var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope))
@@ -96,7 +98,7 @@ class DqnAgent(object):
         reward_batch = np.vstack(batch[:, 2]).reshape(-1)
         next_state_batch = np.vstack(batch[:, 3])
         done_batch = np.vstack(batch[:, 4]).reshape(-1)
-        
+
         loss, _ = sess.run(
             [self.loss, self.update_step],
             feed_dict={
@@ -111,12 +113,12 @@ class DqnAgent(object):
     def observe(self, sess, state, action, reward, next_state, done):
         self.buffer.append(
             (state, action, reward, next_state, done))
-        
+
         if len(self.buffer) > self.batch_size:
             batch_ids = np.random.choice(len(self.buffer), self.batch_size)
             batch = np.array([self.buffer[i] for i in batch_ids])
             return self.train_on_batch(sess, batch)
-        
+
         return 0.0
 
     def _action(self, sess, state):
@@ -132,47 +134,50 @@ class DqnAgent(object):
         if np.random.rand() < epsilon:
             action = np.random.choice(self.n_actions)
         else:
-            action =  self._action(sess, state)
+            action = self._action(sess, state)
         return action
-    
+
     def action(self, sess, state, epsilon=0.0):
         return self._e_greedy_action(sess, state, epsilon)
 
 
 def generate_session(sess, agent, env, epsilon=0.5, t_max=1000):
     """play env with approximate q-learning agent and train it at the same time"""
-    
+
     total_reward = 0
     s = env.reset()
     total_loss = 0
-    
+
     for t in range(t_max):
-        
+
         a = agent.action(sess, np.array([s]), epsilon)
-        
-        new_s,r,done,info = env.step(a)
-        
+
+        new_s, r, done, info = env.step(a)
+
         curr_loss = agent.observe(sess, s, a, r, new_s, done)
 
         total_reward += r
         total_loss += curr_loss
-        
+
         s = new_s
-        if done: 
+        if done:
             break
-            
-    return total_reward, total_loss/float(t), t
+
+    return total_reward, total_loss / float(t), t
 
 
-def q_learning(agent, env, n_epochs, n_sessions=100, t_max=1000, inial_epsilon=0.5, final_epsilon=0.01):
+def q_learning(
+        sess, agent, env, n_epochs, n_sessions=100, t_max=1000,
+        initial_epsilon=1.0, final_epsilon=0.01):
     tr = trange(
         n_epochs,
-        desc="mean reward = {:.3f}\tepsilon = {:.3f}\tloss = {:.3f}\tsteps = {:.3f}".format(0.0, 0.0, 0.0, 0.0),
+        desc="mean reward = {:.3f}\tepsilon = {:.3f}\tloss = {:.3f}\tsteps = {:.3f}".format(
+            0.0, 0.0, 0.0, 0.0),
         leave=True)
 
-    epsilon = 0.5
+    epsilon = initial_epsilon
     n_epochs_decay = n_epochs * 0.8
-    
+
     history = {
         "reward": np.zeros(n_epochs),
         "epsilon": np.zeros(n_epochs),
@@ -180,24 +185,23 @@ def q_learning(agent, env, n_epochs, n_sessions=100, t_max=1000, inial_epsilon=0
         "steps": np.zeros(n_epochs),
     }
 
-    with tf.Session() as sess:
-        sess.run(tf.global_variables_initializer())
+    for i in tr:
+        sessions = [generate_session(sess, agent, env, epsilon, t_max) for _ in range(n_sessions)]
+        session_rewards, session_loss, session_steps = map(np.array, zip(*sessions))
 
-        for i in tr:
-            sessions = [generate_session(sess, agent, env, epsilon, t_max) for _ in range(n_sessions)]
-            session_rewards, session_loss, session_steps = map(np.array, zip(*sessions))
-            
-            if i < n_epochs_decay:
-                epsilon -= (inial_epsilon - final_epsilon) / float(n_epochs_decay)
-            
-            history["reward"][i] = np.mean(session_rewards)
-            history["epsilon"][i] = epsilon
-            history["loss"][i] = np.mean(session_loss)
-            history["steps"][i] = np.mean(session_steps)
-            
-            tr.set_description("mean reward = {:.3f}\tepsilon = {:.3f}\tloss = {:.3f}\tsteps = {:.3f}".format(
-                 history["reward"][i], history["epsilon"][i], history["loss"][i], history["steps"][i]))
-    
+        if i < n_epochs_decay:
+            epsilon -= (initial_epsilon - final_epsilon) / float(n_epochs_decay)
+
+        history["reward"][i] = np.mean(session_rewards)
+        history["epsilon"][i] = epsilon
+        history["loss"][i] = np.mean(session_loss)
+        history["steps"][i] = np.mean(session_steps)
+
+        tr.set_description(
+            "mean reward = {:.3f}\tepsilon = {:.3f}\tloss = {:.3f}\tsteps = {:.3f}".format(
+                history["reward"][i], history["epsilon"][i], history["loss"][i],
+                history["steps"][i]))
+
     return history
 
 
@@ -219,6 +223,7 @@ def linear_network(states, scope=None, reuse=False, layers=None, activation_fn=t
 def linear_network_wrapper(layers=None, activation_fn=tf.tanh):
     def wrapper(states, scope=None, reuse=False):
         return linear_network(states, scope, reuse, layers, activation_fn)
+
     return wrapper
 
 
@@ -253,6 +258,10 @@ def _parse_args():
     parser.add_argument('--buffer_len',
                         type=int,
                         default=10000)
+    parser.add_argument('--initial_epsilon',
+                        type=float,
+                        default=0.99,
+                        help='Gamma discount factor')
 
     args, _ = parser.parse_known_args()
     return args
@@ -260,7 +269,7 @@ def _parse_args():
 
 def run(env, n_epochs, discount_factor,
         plot_stats=False, api_key=None,
-        network=None, batch_size=32, buffer_len=10000):
+        network=None, batch_size=32, buffer_len=10000, initial_epsilon=0.99):
     env_name = env
     env = gym.make(env)
 
@@ -274,18 +283,21 @@ def run(env, n_epochs, discount_factor,
     network = network or linear_network
     agent = DqnAgent(
         state_shape, n_actions, network,
-        gamma=discount_factor, 
+        gamma=discount_factor,
         special=special)
 
-    stats = q_learning(agent, env, n_epochs)
-    if plot_stats:
-        save_stats(stats)
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
 
-    if api_key is not None:
-        env = gym.wrappers.Monitor(env, "/tmp/" + env_name, force=True)
-        sessions = [generate_session(sess, agent, env, 0.01, int(1e10)) for _ in range(300)]
-        env.close()
-        gym.upload("/tmp/" + env_name, api_key=api_key)
+        stats = q_learning(sess, agent, env, n_epochs, initial_epsilon=initial_epsilon)
+        if plot_stats:
+            save_stats(stats)
+
+        if api_key is not None:
+            env = gym.wrappers.Monitor(env, "/tmp/" + env_name, force=True)
+            sessions = [generate_session(sess, agent, env, 0.0, int(1e10)) for _ in range(300)]
+            env.close()
+            gym.upload("/tmp/" + env_name, api_key=api_key)
 
 
 def main():
@@ -295,9 +307,9 @@ def main():
     except:
         layers = None
     network = linear_network_wrapper(layers, activations[args.activation])
-    run(args.env, args.n_epochs, args.gamma, 
-    args.plot_stats, args.api_key, 
-    network, args.batch_size, args.buffer_len)
+    run(args.env, args.n_epochs, args.gamma,
+        args.plot_stats, args.api_key,
+        network, args.batch_size, args.buffer_len, args.initial_epsilon)
 
 
 if __name__ == '__main__':
