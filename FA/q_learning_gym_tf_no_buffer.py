@@ -63,7 +63,7 @@ class DqnAgent(object):
             gamma * tf.reduce_max(predicted_next_qvalues, axis=-1)
         target_qvalues_for_actions = tf.where(
             self.is_end,
-            self.rewards,  # tf.zeros_like(target_qvalues_for_actions),
+            tf.zeros_like(target_qvalues_for_actions),  # self.rewards
             target_qvalues_for_actions)
 
         self.loss = tf.reduce_mean(tf.square(target_qvalues_for_actions - predicted_qvalues_for_actions))
