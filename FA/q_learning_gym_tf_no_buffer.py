@@ -226,7 +226,7 @@ def run(env, n_epochs, discount_factor,
         plot_stats=False, api_key=None,
         network=None, initial_epsilon=0.99):
     env_name = env
-    env = gym.make(env)
+    env = gym.make(env).env
 
     n_actions = env.action_space.n
     state_shape = env.observation_space.shape
@@ -256,10 +256,11 @@ def main():
         layers = tuple(map(int, args.layers.split("-")))
     except:
         layers = None
-    network = linear_network_wrapper(layers, activations[args.activation])
-    run(args.env, args.n_epochs, args.gamma,
-        args.plot_stats, args.api_key,
-        network, args.initial_epsilon)
+    with tf.device("/cpu:0"):
+        network = linear_network_wrapper(layers, activations[args.activation])
+        run(args.env, args.n_epochs, args.gamma,
+            args.plot_stats, args.api_key,
+            network, args.initial_epsilon)
 
 
 if __name__ == '__main__':
