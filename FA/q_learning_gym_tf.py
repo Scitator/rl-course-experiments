@@ -35,6 +35,7 @@ activations = {
     "tanh": tf.tanh,
     "relu": tf.nn.relu,
     "relu6": tf.nn.relu6,
+    "elu": tf.nn.elu,
     "softplus": tf.nn.softplus
 }
 
