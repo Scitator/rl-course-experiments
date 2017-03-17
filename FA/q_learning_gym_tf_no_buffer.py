@@ -131,7 +131,7 @@ def generate_session(sess, agent, env, epsilon=0.5, t_max=1000):
 
 def q_learning(
         sess, agent, env, n_epochs, n_sessions=100, t_max=1000,
-        initial_epsilon=1.0, final_epsilon=0.01):
+        initial_epsilon=0.25, final_epsilon=0.01):
     tr = trange(
         n_epochs,
         desc="mean reward = {:.3f}\tepsilon = {:.3f}\tloss = {:.3f}\tsteps = {:.3f}".format(
@@ -224,7 +224,7 @@ def _parse_args():
 
 def run(env, n_epochs, discount_factor,
         plot_stats=False, api_key=None,
-        network=None, initial_epsilon=0.99):
+        network=None, initial_epsilon=0.25):
     env_name = env
     env = gym.make(env)
 

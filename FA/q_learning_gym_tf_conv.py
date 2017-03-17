@@ -64,7 +64,7 @@ class DqnAgent(object):
         predicted_next_qvalues = self.qnetwork(network, self.next_states, scope=scope, reuse=True)
 
         target_qvalues_for_actions = self.rewards + \
-                                     gamma * tf.reduce_max(predicted_next_qvalues, axis=-1)
+            gamma * tf.reduce_max(predicted_next_qvalues, axis=-1)
         target_qvalues_for_actions = tf.where(
             self.is_end,
             tf.zeros_like(target_qvalues_for_actions),  # self.rewards
@@ -262,6 +262,9 @@ def _parse_args():
                         type=float,
                         default=0.99,
                         help='Gamma discount factor')
+    parser.add_argument('--load',
+                        action='store_true',
+                        default=False)
 
     args, _ = parser.parse_known_args()
     return args
@@ -269,7 +272,8 @@ def _parse_args():
 
 def run(env, n_epochs, discount_factor,
         plot_stats=False, api_key=None,
-        network=None, batch_size=32, buffer_len=10000, initial_epsilon=0.25):
+        network=None, batch_size=32, buffer_len=10000, initial_epsilon=0.25,
+        load=False):
     env_name = env
     env = gym.make(env)
 
@@ -289,9 +293,15 @@ def run(env, n_epochs, discount_factor,
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.4)
 
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-        sess.run(tf.global_variables_initializer())
+        saver = tf.train.Saver()
+        if not load:
+                sess.run(tf.global_variables_initializer())
+        else:
+            saver.restore(sess, "{}.ckpt".format(env_name))
 
         stats = q_learning(sess, agent, env, n_epochs, initial_epsilon=initial_epsilon)
+        saver.save(sess, "{}.ckpt".format(env_name))
+
         if plot_stats:
             save_stats(stats)
 
@@ -305,13 +315,14 @@ def run(env, n_epochs, discount_factor,
 def main():
     args = _parse_args()
     try:
-        layers = tuple(map(int, args.layers.split("-")))
+        layers = tuple(args.layers.split("-"))
     except:
         layers = None
     network = linear_network_wrapper(layers, activations[args.activation])
     run(args.env, args.n_epochs, args.gamma,
         args.plot_stats, args.api_key,
-        network, args.batch_size, args.buffer_len, args.initial_epsilon)
+        network, args.batch_size, args.buffer_len, args.initial_epsilon,
+        args.load)
 
 
 if __name__ == '__main__':
