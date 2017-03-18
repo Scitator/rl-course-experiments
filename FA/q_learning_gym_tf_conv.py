@@ -165,7 +165,7 @@ def generate_session(sess, agent, env, epsilon=0.5, t_max=1000):
         if done:
             break
 
-    return total_reward, total_loss / float(t), t
+    return total_reward, total_loss / float(t+1), t
 
 
 def q_learning(
