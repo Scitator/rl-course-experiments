@@ -1,7 +1,9 @@
 #!/usr/bin/python3
 
 import gym
-from gym import wrappers
+import ppaquette_gym_doom
+from gym.wrappers import SkipWrapper
+from ppaquette_gym_doom.wrappers.action_space import ToDiscrete
 import sys
 import argparse
 import numpy as np
@@ -11,8 +13,9 @@ from tqdm import trange
 import collections
 
 from matplotlib import pyplot as plt
-
 plt.style.use("ggplot")
+
+from wrappers import PreprocessImage
 
 
 def plot_unimetric(history, metric, save_dir):
@@ -77,15 +80,14 @@ class DqnAgent(object):
             self.loss, var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope))
 
     def qnetwork(self, network, state, scope, reuse=False):
-        hidden_state = network(state, scope=scope, reuse=reuse)
-        qvalues = self._to_qvalues(hidden_state, scope=scope, reuse=reuse)
+        hidden_state = network(state, scope=scope + "_hidden", reuse=reuse)
+        qvalues = self._to_qvalues(hidden_state, scope=scope + "_qvalues", reuse=reuse)
         return qvalues
 
     def _to_qvalues(self, hidden_state, scope, reuse=False):
         with tf.variable_scope(scope) as scope:
             if reuse:
                 scope.reuse_variables()
-
             qvalues = tflayers.fully_connected(
                 hidden_state,
                 num_outputs=self.n_actions,
@@ -93,12 +95,12 @@ class DqnAgent(object):
             return qvalues
 
     def train_on_batch(self, sess, batch):
-        state_batch = np.vstack(batch[:, 0])
+        state_batch = np.vstack(batch[:, 0]).reshape((-1, ) + self.state_shape)
         action_batch = np.vstack(batch[:, 1]).reshape(-1)
         reward_batch = np.vstack(batch[:, 2]).reshape(-1)
-        next_state_batch = np.vstack(batch[:, 3])
+        next_state_batch = np.vstack(batch[:, 3]).reshape((-1, ) + self.state_shape)
         done_batch = np.vstack(batch[:, 4]).reshape(-1)
-
+        
         loss, _ = sess.run(
             [self.loss, self.update_step],
             feed_dict={
@@ -149,7 +151,6 @@ def generate_session(sess, agent, env, epsilon=0.5, t_max=1000):
     total_loss = 0
 
     for t in range(t_max):
-
         a = agent.action(sess, np.array([s]), epsilon)
 
         new_s, r, done, info = env.step(a)
@@ -205,24 +206,37 @@ def q_learning(
     return history
 
 
-def linear_network(states, scope=None, reuse=False, layers=None, activation_fn=tf.tanh):
-    layers = layers or [16, 16]
+def conv_network(states, scope, reuse=False, activation_fn=tf.nn.elu):
     with tf.variable_scope(scope or "network") as scope:
         if reuse:
             scope.reuse_variables()
 
-        hidden_state = tflayers.stack(
-            states,
-            tflayers.fully_connected,
-            layers,
+        conv1 = tflayers.conv2d(
+            states, 32, [5, 5], padding='SAME', activation_fn=activation_fn)
+        conv1 = tflayers.conv2d(
+            conv1, 32, [5, 5], padding='VALID', activation_fn=activation_fn)
+        pool1 = tflayers.max_pool2d(conv1, [3, 3], padding='VALID')
+        # pool1 = tflayers.dropout(pool1, keep_prob=keep_prob, is_training=is_training)
+
+        conv2 = tflayers.conv2d(
+            pool1, 32, [5, 5], padding='SAME', activation_fn=activation_fn)
+        conv2 = tflayers.conv2d(
+            conv2, 32, [5, 5], padding='VALID', activation_fn=activation_fn)
+        pool2 = tflayers.max_pool2d(conv2, [3, 3], padding='VALID')
+        # pool2 = tflayers.dropout(pool2, keep_prob=keep_prob, is_training=is_training)
+
+        flat = tflayers.flatten(pool2)
+
+        logits = tflayers.fully_connected(
+            flat,
+            512,
             activation_fn=activation_fn)
+        return logits
 
-        return hidden_state
 
-
-def linear_network_wrapper(layers=None, activation_fn=tf.tanh):
+def network_wrapper(activation_fn=tf.tanh):
     def wrapper(states, scope=None, reuse=False):
-        return linear_network(states, scope, reuse, layers, activation_fn)
+        return conv_network(states, scope, reuse, activation_fn=activation_fn)
 
     return wrapper
 
@@ -231,7 +245,7 @@ def _parse_args():
     parser = argparse.ArgumentParser(description='Policy iteration example')
     parser.add_argument('--env',
                         type=str,
-                        default='CartPole-v0',  # CartPole-v0, MountainCar-v0
+                        default='ppaquette/DoomBasic-v0',  # CartPole-v0, MountainCar-v0
                         help='The environment to use')
     parser.add_argument('--n_epochs',
                         type=int,
@@ -244,9 +258,6 @@ def _parse_args():
                         action='store_true',
                         default=False)
     parser.add_argument('--api_key',
-                        type=str,
-                        default=None)
-    parser.add_argument('--layers',
                         type=str,
                         default=None)
     parser.add_argument('--activation',
@@ -275,7 +286,10 @@ def run(env, n_epochs, discount_factor,
         network=None, batch_size=32, buffer_len=10000, initial_epsilon=0.25,
         load=False):
     env_name = env
-    env = gym.make(env)
+    make_env = lambda: PreprocessImage(
+        SkipWrapper(4)(ToDiscrete("minimal")(gym.make(env_name))),
+        width=80, height=80, grayscale=True)
+    env = make_env()
 
     n_actions = env.action_space.n
     state_shape = env.observation_space.shape
@@ -284,7 +298,7 @@ def run(env, n_epochs, discount_factor,
         "buffer_len": buffer_len
     }
 
-    network = network or linear_network
+    network = network or conv_network
     agent = DqnAgent(
         state_shape, n_actions, network,
         gamma=discount_factor,
@@ -295,7 +309,7 @@ def run(env, n_epochs, discount_factor,
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         saver = tf.train.Saver()
         if not load:
-                sess.run(tf.global_variables_initializer())
+            sess.run(tf.global_variables_initializer())
         else:
             saver.restore(sess, "{}.ckpt".format(env_name))
 
@@ -314,11 +328,7 @@ def run(env, n_epochs, discount_factor,
 
 def main():
     args = _parse_args()
-    try:
-        layers = tuple(args.layers.split("-"))
-    except:
-        layers = None
-    network = linear_network_wrapper(layers, activations[args.activation])
+    network = network_wrapper(activations[args.activation])
     run(args.env, args.n_epochs, args.gamma,
         args.plot_stats, args.api_key,
         network, args.batch_size, args.buffer_len, args.initial_epsilon,

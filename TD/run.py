@@ -17,9 +17,9 @@ import os
 import pickle
 from tqdm import trange
 
-from .qlearning import QLearningAgent
-from .sarsa import SarsaAgent
-from .evsarsa import EVSarsaAgent
+from qlearning import QLearningAgent
+from sarsa import SarsaAgent
+from evsarsa import EVSarsaAgent
 
 
 def plot_unimetric(history, metric, save_dir):
