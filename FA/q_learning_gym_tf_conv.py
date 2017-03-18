@@ -311,10 +311,10 @@ def run(env, n_epochs, discount_factor,
         if not load:
             sess.run(tf.global_variables_initializer())
         else:
-            saver.restore(sess, "{}.ckpt".format(env_name))
+            saver.restore(sess, "{}.ckpt".format(env_name.replace("/", "_")))
 
         stats = q_learning(sess, agent, env, n_epochs, initial_epsilon=initial_epsilon)
-        saver.save(sess, "{}.ckpt".format(env_name))
+        saver.save(sess, "{}.ckpt".format(env_name.replace("/", "_")))
 
         if plot_stats:
             save_stats(stats)
