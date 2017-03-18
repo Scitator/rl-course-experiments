@@ -78,8 +78,8 @@ class DqnAgent(object):
             self.loss, var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope))
 
     def qnetwork(self, network, state, scope, reuse=False):
-        hidden_state = network(state, scope=scope, reuse=reuse)
-        qvalues = self._to_qvalues(hidden_state, scope=scope, reuse=reuse)
+        hidden_state = network(state, scope=scope + "_hidden", reuse=reuse)
+        qvalues = self._to_qvalues(hidden_state, scope=scope + "_qvalues", reuse=reuse)
         return qvalues
 
     def _to_qvalues(self, hidden_state, scope, reuse=False):
