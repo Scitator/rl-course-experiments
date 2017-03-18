@@ -4,7 +4,8 @@ import gym
 import ppaquette_gym_doom
 from gym.wrappers import SkipWrapper
 from ppaquette_gym_doom.wrappers.action_space import ToDiscrete
-import sys
+import os
+import string
 import argparse
 import numpy as np
 import tensorflow as tf
@@ -16,6 +17,11 @@ from matplotlib import pyplot as plt
 plt.style.use("ggplot")
 
 from wrappers import PreprocessImage
+
+
+def create_if_need(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
 
 
 def plot_unimetric(history, metric, save_dir):
@@ -312,22 +318,24 @@ def run(env, n_epochs, discount_factor,
 
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         saver = tf.train.Saver()
+        model_dir = "./logs_" + env_name.replace(string.punctuation, "_")
         if not load:
             sess.run(tf.global_variables_initializer())
         else:
-            saver.restore(sess, "{}.ckpt".format(env_name.replace("/", "_")))
+            saver.restore(sess, "{}/model.ckpt".format(model_dir))
 
         stats = q_learning(sess, agent, env, n_epochs, initial_epsilon=initial_epsilon)
-        saver.save(sess, "{}.ckpt".format(env_name.replace("/", "_")))
+        create_if_need(model_dir)
+        saver.save(sess, "{}/model.ckpt".format(model_dir))
 
         if plot_stats:
             save_stats(stats)
 
         if api_key is not None:
-            env = gym.wrappers.Monitor(env, "./tmp/" + env_name, force=True)
+            env = gym.wrappers.Monitor(env, "{}/monitor".format(model_dir), force=True)
             sessions = [generate_session(sess, agent, env, 0.0, int(1e10)) for _ in range(300)]
             env.close()
-            gym.upload("./tmp/" + env_name, api_key=api_key)
+            gym.upload("{}/monitor".format(model_dir), api_key=api_key)
 
 
 def main():
