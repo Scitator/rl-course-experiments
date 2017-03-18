@@ -320,10 +320,10 @@ def run(env, n_epochs, discount_factor,
             save_stats(stats)
 
         if api_key is not None:
-            env = gym.wrappers.Monitor(env, "/tmp/" + env_name, force=True)
+            env = gym.wrappers.Monitor(env, "./tmp/" + env_name, force=True)
             sessions = [generate_session(sess, agent, env, 0.0, int(1e10)) for _ in range(300)]
             env.close()
-            gym.upload("/tmp/" + env_name, api_key=api_key)
+            gym.upload("./tmp/" + env_name, api_key=api_key)
 
 
 def main():
