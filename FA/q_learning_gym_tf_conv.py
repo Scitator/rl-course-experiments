@@ -277,6 +277,9 @@ def _parse_args():
     parser.add_argument('--load',
                         action='store_true',
                         default=False)
+    parser.add_argument('--gpu_option',
+                        type=float,
+                        default=0.4)
 
     args, _ = parser.parse_known_args()
     return args
@@ -285,7 +288,7 @@ def _parse_args():
 def run(env, n_epochs, discount_factor,
         plot_stats=False, api_key=None,
         network=None, batch_size=32, buffer_len=10000, initial_epsilon=0.25,
-        load=False):
+        load=False, gpu_option=0.4):
     env_name = env
     make_env = lambda: PreprocessImage(
         SkipWrapper(4)(ToDiscrete("minimal")(gym.make(env_name))),
@@ -305,7 +308,7 @@ def run(env, n_epochs, discount_factor,
         gamma=discount_factor,
         special=special)
 
-    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.4)
+    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
 
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         saver = tf.train.Saver()
@@ -333,7 +336,7 @@ def main():
     run(args.env, args.n_epochs, args.gamma,
         args.plot_stats, args.api_key,
         network, args.batch_size, args.buffer_len, args.initial_epsilon,
-        args.load)
+        args.load, args.gpu_option)
 
 
 if __name__ == '__main__':

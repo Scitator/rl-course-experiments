@@ -164,7 +164,7 @@ def generate_session(sess, agent, env, epsilon=0.5, t_max=1000):
         if done:
             break
 
-    return total_reward, total_loss / float(t), t
+    return total_reward, total_loss / float(t+1), t
 
 
 def q_learning(
@@ -263,6 +263,12 @@ def _parse_args():
                         type=float,
                         default=0.99,
                         help='Gamma discount factor')
+    parser.add_argument('--load',
+                        action='store_true',
+                        default=False)
+    parser.add_argument('--gpu_option',
+                        type=float,
+                        default=0.4)
 
     args, _ = parser.parse_known_args()
     return args
@@ -270,7 +276,8 @@ def _parse_args():
 
 def run(env, n_epochs, discount_factor,
         plot_stats=False, api_key=None,
-        network=None, batch_size=32, buffer_len=10000, initial_epsilon=0.25):
+        network=None, batch_size=32, buffer_len=10000, initial_epsilon=0.25,
+        load=False, gpu_option=0.4):
     env_name = env
     env = gym.make(env)
 
@@ -287,12 +294,18 @@ def run(env, n_epochs, discount_factor,
         gamma=discount_factor,
         special=special)
 
-    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.4)
+    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
 
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-        sess.run(tf.global_variables_initializer())
+        saver = tf.train.Saver()
+        if not load:
+            sess.run(tf.global_variables_initializer())
+        else:
+            saver.restore(sess, "{}.ckpt".format(env_name.replace("/", "_")))
 
         stats = q_learning(sess, agent, env, n_epochs, initial_epsilon=initial_epsilon)
+        saver.save(sess, "{}.ckpt".format(env_name.replace("/", "_")))
+
         if plot_stats:
             save_stats(stats)
 
@@ -312,7 +325,8 @@ def main():
     network = linear_network_wrapper(layers, activations[args.activation])
     run(args.env, args.n_epochs, args.gamma,
         args.plot_stats, args.api_key,
-        network, args.batch_size, args.buffer_len, args.initial_epsilon)
+        network, args.batch_size, args.buffer_len, args.initial_epsilon,
+        args.load, args.gpu_option)
 
 
 if __name__ == '__main__':
