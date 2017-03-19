@@ -83,7 +83,7 @@ class DqnAgent(object):
         self.loss = tf.reduce_mean(
             tf.square(target_qvalues_for_actions - predicted_qvalues_for_actions))
 
-        self.update_step = tf.train.AdamOptimizer(1e-4).minimize(
+        self.update_step = tf.train.AdamOptimizer(self.special.get("lr", 1e-4)).minimize(
             self.loss, var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope))
 
     def qnetwork(self, network, state, scope, reuse=False):
@@ -286,6 +286,9 @@ def _parse_args():
     parser.add_argument('--gpu_option',
                         type=float,
                         default=0.4)
+    parser.add_argument('--initial_lr',
+                        type=float,
+                        default=1e-4)
 
     args, _ = parser.parse_known_args()
     return args
@@ -294,7 +297,7 @@ def _parse_args():
 def run(env, n_epochs, discount_factor,
         plot_stats=False, api_key=None,
         network=None, batch_size=32, buffer_len=10000, initial_epsilon=0.25,
-        load=False, gpu_option=0.4):
+        load=False, gpu_option=0.4, initial_lr=1e-4):
     env_name = env
     make_env = lambda: PreprocessImage(
         SkipWrapper(4)(ToDiscrete("minimal")(gym.make(env_name))),
@@ -305,7 +308,8 @@ def run(env, n_epochs, discount_factor,
     state_shape = env.observation_space.shape
     special = {
         "batch_size": batch_size,
-        "buffer_len": buffer_len
+        "buffer_len": buffer_len,
+        "lr": initial_lr
     }
 
     network = network or conv_network
@@ -344,7 +348,7 @@ def main():
     run(args.env, args.n_epochs, args.gamma,
         args.plot_stats, args.api_key,
         network, args.batch_size, args.buffer_len, args.initial_epsilon,
-        args.load, args.gpu_option)
+        args.load, args.gpu_option, args.initial_lr)
 
 
 if __name__ == '__main__':
