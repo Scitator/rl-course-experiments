@@ -251,7 +251,8 @@ def run(env, n_episodes, discount_factor, verbose=False, plot_stats=False, api_k
 
 def main():
     args = _parse_args()
-    run(args.env, args.num_episodes, args.gamma, args.verbose, args.plot_stats, args.api_key)
+    run(args.env, args.num_episodes, args.gamma,
+        args.verbose, args.plot_stats, args.api_key)
 
 
 if __name__ == '__main__':
