@@ -187,7 +187,7 @@ def observe2update(params):
     return wrapper
 
 
-def generate_session(sess, agent, env, epsilon=0.5, t_max=1000):
+def generate_session(sess, agent, env, epsilon=0.5, t_max=1000, observe=True):
     """play env with approximate q-learning agent and train it at the same time"""
 
     total_reward = 0
@@ -199,7 +199,8 @@ def generate_session(sess, agent, env, epsilon=0.5, t_max=1000):
 
         new_s, r, done, info = env.step(a)
 
-        curr_loss = agent.observe(sess, s, a, r, new_s, done)
+        if observe:
+            curr_loss = agent.observe(sess, s, a, r, new_s, done)
 
         total_reward += r
         total_loss += curr_loss
@@ -403,7 +404,8 @@ def run(env, q_learning_args,
 
         if api_key is not None:
             env = gym.wrappers.Monitor(env, "{}/monitor".format(model_dir), force=True)
-            sessions = [generate_session(sess, agent, env, 0.0, int(1e10)) for _ in range(300)]
+            sessions = [generate_session(sess, agent, env, 0.0, int(1e10), False)
+                        for _ in range(300)]
             env.close()
             gym.upload("{}/monitor".format(model_dir), api_key=api_key)
 
