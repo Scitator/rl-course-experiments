@@ -293,7 +293,7 @@ def _parse_args():
     parser = argparse.ArgumentParser(description='Policy iteration example')
     parser.add_argument('--env',
                         type=str,
-                        default='BreakoutDeterministic-v0',  # CartPole-v0, MountainCar-v0
+                        default='KungFuMaster-v0',  # BreakoutDeterministic-v0
                         help='The environment to use')
     parser.add_argument('--n_epochs',
                         type=int,
@@ -326,13 +326,13 @@ def _parse_args():
                         default=False)
     parser.add_argument('--gpu_option',
                         type=float,
-                        default=0.4)
+                        default=0.45)
     parser.add_argument('--initial_lr',
                         type=float,
                         default=1e-4)
     parser.add_argument('--n_epochs_skip',
                         type=int,
-                        default=10)
+                        default=1)
 
     args, _ = parser.parse_known_args()
     return args
