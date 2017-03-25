@@ -167,11 +167,6 @@ def update(sess, q_net, target_net, buffer, discount_factor=0.99, batch_size=32)
     batch_ids = np.random.choice(len(buffer), batch_size)
     batch = np.array([buffer[i] for i in batch_ids])
 
-    # state_batch = np.vstack(batch[:, 0]).reshape((-1,) + q_net.state_shape)
-    # state_next_batch = np.vstack(batch[:, 1]).reshape((-1,) + q_net.state_shape)
-    # reward_batch = np.vstack(batch[:, 2]).reshape(-1)
-    # done_batch = np.vstack(batch[:, 3]).reshape(-1)
-
     state_batch = np.vstack(batch[:, 0]).reshape((-1,) + q_net.state_shape)
     # action_batch = np.vstack(batch[:, 1]).reshape(-1)
     reward_batch = np.vstack(batch[:, 2]).reshape(-1)
@@ -410,6 +405,8 @@ def run(env, q_learning_args,
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         saver = tf.train.Saver()
         model_dir = "./logs_" + env_name.replace(string.punctuation, "_")
+        if dueling_network:
+            model_dir += "_dueling_network"
         if not load:
             sess.run(tf.global_variables_initializer())
         else:
@@ -422,7 +419,9 @@ def run(env, q_learning_args,
         saver.save(sess, "{}/model.ckpt".format(model_dir))
 
         if plot_stats:
-            save_stats(stats)
+            stats_dir = os.path.join(model_dir, "stats")
+            create_if_need(stats_dir)
+            save_stats(stats, save_dir=stats_dir)
 
         if api_key is not None:
             env = gym.wrappers.Monitor(env, "{}/monitor".format(model_dir), force=True)
