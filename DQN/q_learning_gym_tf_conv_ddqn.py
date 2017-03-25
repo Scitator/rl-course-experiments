@@ -260,16 +260,16 @@ def conv_network(states, scope, reuse=False, activation_fn=tf.nn.elu):
             scope.reuse_variables()
 
         conv1 = tflayers.conv2d(
-            states, 32, [5, 5], padding='SAME', activation_fn=activation_fn)
+            states, 32, [5, 5], stride=1, padding='SAME', activation_fn=activation_fn)
         conv1 = tflayers.conv2d(
-            conv1, 32, [5, 5], padding='VALID', activation_fn=activation_fn)
+            conv1, 32, [5, 5], stride=2, padding='VALID', activation_fn=activation_fn)
         pool1 = tflayers.max_pool2d(conv1, [3, 3], padding='VALID')
         # pool1 = tflayers.dropout(pool1, keep_prob=keep_prob, is_training=is_training)
 
         conv2 = tflayers.conv2d(
-            pool1, 32, [5, 5], padding='SAME', activation_fn=activation_fn)
+            pool1, 32, [5, 5], stride=1, padding='SAME', activation_fn=activation_fn)
         conv2 = tflayers.conv2d(
-            conv2, 32, [5, 5], padding='VALID', activation_fn=activation_fn)
+            conv2, 32, [5, 5], stride=2, padding='VALID', activation_fn=activation_fn)
         pool2 = tflayers.max_pool2d(conv2, [3, 3], padding='VALID')
         # pool2 = tflayers.dropout(pool2, keep_prob=keep_prob, is_training=is_training)
 
@@ -277,7 +277,7 @@ def conv_network(states, scope, reuse=False, activation_fn=tf.nn.elu):
 
         logits = tflayers.fully_connected(
             flat,
-            512,
+            int(flat.get_shape().as_list()[-1]/2),
             activation_fn=activation_fn)
         return logits
 
@@ -310,13 +310,13 @@ def _parse_args():
                         default=None)
     parser.add_argument('--activation',
                         type=str,
-                        default="tanh")
+                        default="elu")
     parser.add_argument('--batch_size',
                         type=int,
-                        default=32)
+                        default=64)
     parser.add_argument('--buffer_len',
                         type=int,
-                        default=10000)
+                        default=100000)
     parser.add_argument('--initial_epsilon',
                         type=float,
                         default=0.99,
