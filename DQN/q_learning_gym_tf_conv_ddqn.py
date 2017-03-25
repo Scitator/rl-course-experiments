@@ -298,6 +298,12 @@ def _parse_args():
     parser.add_argument('--n_epochs',
                         type=int,
                         default=1000)
+    parser.add_argument('--n_sessions',
+                        type=int,
+                        default=100)
+    parser.add_argument('--t_max',
+                        type=int,
+                        default=1000)
     parser.add_argument('--gamma',
                         type=float,
                         default=0.99,
@@ -338,10 +344,11 @@ def _parse_args():
     return args
 
 
-def run(env, n_epochs, n_epochs_skip, discount_factor,
+def run(env, q_learning_args,
+        discount_factor=0.99, initial_lr=1e-4,
+        network=None, batch_size=64, buffer_len=100000,
         plot_stats=False, api_key=None,
-        network=None, batch_size=64, buffer_len=100000, initial_epsilon=0.25,
-        load=False, gpu_option=0.4, initial_lr=1e-4):
+        load=False, gpu_option=0.4):
     env_name = env
     height, width = 64, 64
     n_frames = 4
@@ -386,9 +393,8 @@ def run(env, n_epochs, n_epochs_skip, discount_factor,
             saver.restore(sess, "{}/model.ckpt".format(model_dir))
 
         stats = q_learning(
-            sess, agent, frozen_agent, env, n_epochs,
-            n_epochs_skip=n_epochs_skip,
-            initial_epsilon=initial_epsilon)
+            sess, agent, frozen_agent, env,
+            **q_learning_args)
         create_if_need(model_dir)
         saver.save(sess, "{}/model.ckpt".format(model_dir))
 
@@ -405,10 +411,18 @@ def run(env, n_epochs, n_epochs_skip, discount_factor,
 def main():
     args = _parse_args()
     network = network_wrapper(activations[args.activation])
-    run(args.env, args.n_epochs, args.n_epochs_skip, args.gamma,
+    q_learning_args = {
+        "n_epochs": args.n_epochs,
+        "n_epochs_skip": args.n_epochs_skip,
+        "n_sessions": args.n_sessions,
+        "t_max": args.t_max,
+        "initial_epsilon": args.initial_epsilon,
+    }
+    run(args.env, q_learning_args,
+        args.gamma, args.initial_lr,
+        network, args.batch_size, args.buffer_len,
         args.plot_stats, args.api_key,
-        network, args.batch_size, args.buffer_len, args.initial_epsilon,
-        args.load, args.gpu_option, args.initial_lr)
+        args.load, args.gpu_option)
 
 
 if __name__ == '__main__':
