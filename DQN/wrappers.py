@@ -29,12 +29,13 @@ class PreprocessImage(ObservationWrapper):
 
 
 class FrameBuffer(Wrapper):
-    def __init__(self, env, n_frames=4):
+    def __init__(self, env, n_frames=4, reshape_fn=lambda x: x):
         """A gym wrapper that returns last n_frames observations as a single observation.
         Useful for games like Atari and Doom with screen as input."""
         super(FrameBuffer, self).__init__(env)
-        self.observation_space = Box(0.0, 1.0, [n_frames,]+list(env.observation_space.shape))
+        self.reshape_fn = reshape_fn
         self.framebuffer = np.zeros([n_frames,]+list(env.observation_space.shape))
+        self.observation_space = Box(0.0, 1.0, self.reshape_fn(self.framebuffer).shape)
 
     def reset(self):
         """resets breakout, returns initial frames"""
@@ -46,7 +47,7 @@ class FrameBuffer(Wrapper):
         """plays breakout for 1 step, returns 4-frame buffer"""
         new_obs, r, done, info = self.env.step(action)
         self.update_buffer(new_obs)
-        return self.framebuffer, r, done, info
+        return self.reshape_fn(self.framebuffer), r, done, info
 
     def update_buffer(self, obs):
         """push new observation to the buffer, remove the earliest one"""
