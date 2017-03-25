@@ -41,7 +41,7 @@ class FrameBuffer(Wrapper):
         """resets breakout, returns initial frames"""
         self.framebuffer = np.zeros_like(self.framebuffer)
         self.update_buffer(self.env.reset())
-        return self.framebuffer
+        return self.reshape_fn(self.framebuffer)
 
     def step(self, action):
         """plays breakout for 1 step, returns 4-frame buffer"""
