@@ -110,7 +110,7 @@ class DqnAgent(object):
         if self.special.get("dueling_network", False):
             state_value = self._state_value(
                 hidden_state, scope=scope + "_state_values", reuse=reuse)
-            qvalues -= tf.reduce_mean(qvalues, axis=-1)
+            qvalues -= tf.reduce_mean(qvalues, axis=-1, keep_dims=True)
             qvalues += state_value
         return qvalues
 
