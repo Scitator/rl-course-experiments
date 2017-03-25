@@ -106,16 +106,31 @@ class DqnAgent(object):
 
     def qnetwork(self, network, state, scope, reuse=False):
         hidden_state = network(state, scope=scope + "_hidden", reuse=reuse)
-        qvalues = self._to_qvalues(hidden_state, scope=scope + "_qvalues", reuse=reuse)
+        qvalues = self._qvalues(hidden_state, scope=scope + "_qvalues", reuse=reuse)
+        if self.special.get("dueling_network", False):
+            state_value = self._state_value(
+                hidden_state, scope=scope + "_state_values", reuse=reuse)
+            qvalues -= tf.reduce_mean(qvalues, axis=-1)
+            qvalues += state_value
         return qvalues
 
-    def _to_qvalues(self, hidden_state, scope, reuse=False):
+    def _qvalues(self, hidden_state, scope, reuse=False):
         with tf.variable_scope(scope) as scope:
             if reuse:
                 scope.reuse_variables()
             qvalues = tflayers.fully_connected(
                 hidden_state,
                 num_outputs=self.n_actions,
+                activation_fn=None)
+            return qvalues
+
+    def _state_value(self, hidden_state, scope, reuse=False):
+        with tf.variable_scope(scope) as scope:
+            if reuse:
+                scope.reuse_variables()
+            qvalues = tflayers.fully_connected(
+                hidden_state,
+                num_outputs=1,
                 activation_fn=None)
             return qvalues
 
@@ -201,9 +216,9 @@ def generate_session(sess, agent, env, epsilon=0.5, t_max=1000, observe=True):
 
         if observe:
             curr_loss = agent.observe(sess, s, a, r, new_s, done)
+            total_loss += curr_loss
 
         total_reward += r
-        total_loss += curr_loss
 
         s = new_s
         if done:
@@ -326,7 +341,7 @@ def _parse_args():
                         default=100000)
     parser.add_argument('--initial_epsilon',
                         type=float,
-                        default=0.99,
+                        default=0.25,
                         help='Gamma discount factor')
     parser.add_argument('--load',
                         action='store_true',
@@ -340,13 +355,16 @@ def _parse_args():
     parser.add_argument('--n_epochs_skip',
                         type=int,
                         default=1)
+    parser.add_argument('--dueling_network',
+                        action='store_true',
+                        default=False)
 
     args, _ = parser.parse_known_args()
     return args
 
 
 def run(env, q_learning_args,
-        discount_factor=0.99, initial_lr=1e-4,
+        discount_factor=0.99, initial_lr=1e-4, dueling_network=False,
         network=None, batch_size=64, buffer_len=100000,
         plot_stats=False, api_key=None,
         load=False, gpu_option=0.4):
@@ -364,24 +382,28 @@ def run(env, q_learning_args,
 
     n_actions = env.action_space.n
     state_shape = env.observation_space.shape
-    special = {
-        "batch_size": batch_size,
-        "buffer_len": buffer_len,
-        "lr": initial_lr,
-        "scope": "q_net"
-    }
 
     network = network or conv_network
     frozen_agent = DqnAgent(
         state_shape, n_actions, network,
         update_fn=None,
-        special={"scope": "frozen_q_net"})
+        special={
+            "batch_size": 0,
+            "buffer_len": 0,
+            "lr": initial_lr,
+            "scope": "frozen_q_net",
+            "dueling_network": dueling_network})
     agent = DqnAgent(
         state_shape, n_actions, network,
         update_fn=observe2update({
             "target_net": frozen_agent,
             "discount_factor": discount_factor}),
-        special=special)
+        special={
+            "batch_size": batch_size,
+            "buffer_len": buffer_len,
+            "lr": initial_lr,
+            "scope": "q_net",
+            "dueling_network": dueling_network})
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
 
@@ -421,7 +443,7 @@ def main():
         "initial_epsilon": args.initial_epsilon,
     }
     run(args.env, q_learning_args,
-        args.gamma, args.initial_lr,
+        args.gamma, args.initial_lr, args.dueling_network,
         network, args.batch_size, args.buffer_len,
         args.plot_stats, args.api_key,
         args.load, args.gpu_option)
