@@ -253,7 +253,7 @@ def q_learning(
         if i < n_epochs_decay:
             epsilon -= (initial_epsilon - final_epsilon) / float(n_epochs_decay)
 
-        if (i + 1) % n_epochs_skip:
+        if (i + 1) % n_epochs_skip == 0:
             copy_model_parameters(sess, q_net, target_net)
 
         history["reward"][i] = np.mean(session_rewards)
