@@ -182,7 +182,7 @@ def update(sess, q_net, target_net, discount_factor=0.99, batch_size=32):
                           np.invert(done_batch).astype(np.float32) * \
                           discount_factor * qvalues_next[np.arange(batch_size), best_actions]
 
-        q_loss, _ = q_net.update(sess, state_batch, action_batch, td_target_batch)
+        q_loss = q_net.update(sess, state_batch, action_batch, td_target_batch)
 
     return q_loss
 
