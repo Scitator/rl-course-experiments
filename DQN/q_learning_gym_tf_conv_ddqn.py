@@ -1,9 +1,7 @@
 #!/usr/bin/python3
 
 import gym
-import ppaquette_gym_doom
 from gym.wrappers import SkipWrapper
-from ppaquette_gym_doom.wrappers.action_space import ToDiscrete
 import os
 import string
 import argparse
@@ -26,7 +24,7 @@ def copy_model_parameters(sess, net1, net2):
 
     Args:
       sess: Tensorflow session instance
-      net1: net to copy the paramters from
+      net1: net to copy the parameters from
       net2: net to copy the parameters to
     """
     net1_params = [t for t in tf.trainable_variables() if t.name.startswith(net1.scope)]
@@ -95,8 +93,9 @@ class DqnAgent(object):
             tf.multiply(self.predicted_qvalues, one_hot_actions),
             axis=-1)
 
-        self.loss = tf.reduce_mean(
-            tf.square(self.td_targets - predicted_qvalues_for_actions))
+        self.loss = tf.losses.mean_squared_error(
+            labels=self.td_targets,
+            predictions=predicted_qvalues_for_actions)
 
         self.update_step = tf.train.AdamOptimizer(self.special.get("lr", 1e-4)).minimize(
             self.loss,
@@ -105,11 +104,13 @@ class DqnAgent(object):
     def qnetwork(self, network, state, scope, reuse=False):
         hidden_state = network(state, scope=scope + "_hidden", reuse=reuse)
         qvalues = self._qvalues(hidden_state, scope=scope + "_qvalues", reuse=reuse)
+
         if self.special.get("dueling_network", False):
             state_value = self._state_value(
                 hidden_state, scope=scope + "_state_values", reuse=reuse)
             qvalues -= tf.reduce_mean(qvalues, axis=-1, keep_dims=True)
             qvalues += state_value
+
         return qvalues
 
     def _qvalues(self, hidden_state, scope, reuse=False):
@@ -138,6 +139,15 @@ class DqnAgent(object):
             feed_dict={
                 self.states: state_batch})
 
+    def update(self, sess, state_batch, action_batch, td_target_batch):
+        q_loss, _ = sess.run(
+            [self.loss, self.update_step],
+            feed_dict={
+                self.states: state_batch,
+                self.actions: action_batch,
+                self.td_targets: td_target_batch})
+        return q_loss
+
     def observe(self, state, action, reward, next_state, done):
         self.buffer.append(
             (state, action, reward, next_state, done))
@@ -160,7 +170,7 @@ def update(sess, q_net, target_net, discount_factor=0.99, batch_size=32):
         batch = np.array([q_net.buffer[i] for i in batch_ids])
 
         state_batch = np.vstack(batch[:, 0]).reshape((-1,) + q_net.state_shape)
-        # action_batch = np.vstack(batch[:, 1]).reshape(-1)
+        action_batch = np.vstack(batch[:, 1]).reshape(-1)
         reward_batch = np.vstack(batch[:, 2]).reshape(-1)
         next_state_batch = np.vstack(batch[:, 3]).reshape((-1,) + q_net.state_shape)
         done_batch = np.vstack(batch[:, 4]).reshape(-1)
@@ -172,23 +182,18 @@ def update(sess, q_net, target_net, discount_factor=0.99, batch_size=32):
                           np.invert(done_batch).astype(np.float32) * \
                           discount_factor * qvalues_next[np.arange(batch_size), best_actions]
 
-        q_loss, _ = sess.run(
-            [q_net.loss, q_net.update_step],
-            feed_dict={
-                q_net.states: state_batch,
-                q_net.actions: best_actions,
-                q_net.td_targets: td_target_batch})
+        q_loss, _ = q_net.update(sess, state_batch, action_batch, td_target_batch)
 
     return q_loss
 
 
-def update_wrap(discount_factor=0.99, batch_size=32):
+def update_wraper(discount_factor=0.99, batch_size=32):
     def wrapper(sess, q_net, target_net):
         return update(sess, q_net, target_net, discount_factor, batch_size)
     return wrapper
 
 
-def generate_session(sess, agent, env, epsilon=0.5, t_max=1000, update_fn=None):
+def generate_session(sess, q_net, target_net, env, epsilon=0.5, t_max=1000, update_fn=None):
     """play env with approximate q-learning agent and train it at the same time"""
 
     total_reward = 0
@@ -196,13 +201,13 @@ def generate_session(sess, agent, env, epsilon=0.5, t_max=1000, update_fn=None):
     total_loss = 0
 
     for t in range(t_max):
-        a = e_greedy_action(agent, sess, s, epsilon)
+        a = e_greedy_action(q_net, sess, s, epsilon)
 
         new_s, r, done, info = env.step(a)
 
         if update_fn is not None:
-            agent.observe(s, a, r, new_s, done)
-            curr_loss = update_fn(sess, agent)
+            q_net.observe(s, a, r, new_s, done)
+            curr_loss = update_fn(sess, q_net, target_net)
             total_loss += curr_loss
 
         total_reward += r
@@ -215,7 +220,7 @@ def generate_session(sess, agent, env, epsilon=0.5, t_max=1000, update_fn=None):
 
 
 def q_learning(
-        sess, agent, frozen_agent, env, update_wrapper,
+        sess, q_net, target_net, env, update_fn,
         n_epochs=1000, n_epochs_skip=10, n_sessions=100, t_max=1000,
         initial_epsilon=0.25, final_epsilon=0.01):
     tr = trange(
@@ -234,10 +239,9 @@ def q_learning(
         "steps": np.zeros(n_epochs),
     }
 
-    update_fn = lambda sess, agent: update_wrapper(sess, agent, frozen_agent)
     for i in tr:
         sessions = [
-            generate_session(sess, agent, env, epsilon, t_max, update_fn=update_fn)
+            generate_session(sess, q_net, target_net, env, epsilon, t_max, update_fn=update_fn)
             for _ in range(n_sessions)]
         session_rewards, session_loss, session_steps = map(np.array, zip(*sessions))
 
@@ -245,8 +249,7 @@ def q_learning(
             epsilon -= (initial_epsilon - final_epsilon) / float(n_epochs_decay)
 
         if (i + 1) % n_epochs_skip:
-            copy_model_parameters(sess, agent, frozen_agent)
-            update_fn = lambda sess, agent: update_wrapper(sess, agent, frozen_agent)
+            copy_model_parameters(sess, q_net, target_net)
 
         history["reward"][i] = np.mean(session_rewards)
         history["epsilon"][i] = epsilon
@@ -267,16 +270,16 @@ def conv_network(states, scope, reuse=False, activation_fn=tf.nn.elu):
             scope.reuse_variables()
 
         conv1 = tflayers.conv2d(
-            states, 32, [5, 5], stride=1, padding='SAME', activation_fn=activation_fn)
+            states, 32, [5, 5], stride=2, padding='SAME', activation_fn=activation_fn)
         conv1 = tflayers.conv2d(
-            conv1, 32, [5, 5], stride=2, padding='VALID', activation_fn=activation_fn)
+            conv1, 32, [5, 5], stride=1, padding='VALID', activation_fn=activation_fn)
         pool1 = tflayers.max_pool2d(conv1, [3, 3], padding='VALID')
         # pool1 = tflayers.dropout(pool1, keep_prob=keep_prob, is_training=is_training)
 
         conv2 = tflayers.conv2d(
-            pool1, 32, [5, 5], stride=1, padding='SAME', activation_fn=activation_fn)
+            pool1, 32, [5, 5], stride=2, padding='SAME', activation_fn=activation_fn)
         conv2 = tflayers.conv2d(
-            conv2, 32, [5, 5], stride=2, padding='VALID', activation_fn=activation_fn)
+            conv2, 32, [5, 5], stride=1, padding='VALID', activation_fn=activation_fn)
         pool2 = tflayers.max_pool2d(conv2, [3, 3], padding='VALID')
         # pool2 = tflayers.dropout(pool2, keep_prob=keep_prob, is_training=is_training)
 
@@ -284,12 +287,12 @@ def conv_network(states, scope, reuse=False, activation_fn=tf.nn.elu):
 
         logits = tflayers.fully_connected(
             flat,
-            int(flat.get_shape().as_list()[-1]/2),
+            min(512, max(128, flat.get_shape().as_list()[-1])),
             activation_fn=activation_fn)
         return logits
 
 
-def network_wrapper(activation_fn=tf.tanh):
+def network_wrapper(activation_fn=tf.nn.elu):
     def wrapper(states, scope=None, reuse=False):
         return conv_network(states, scope, reuse, activation_fn=activation_fn)
 
@@ -360,7 +363,7 @@ def run(env, q_learning_args, update_args,
         plot_stats=False, api_key=None,
         load=False, gpu_option=0.4):
     env_name = env
-    height, width = 64, 64
+    height, width = 84, 84
     n_frames = 4
     make_env = lambda: FrameBuffer(
         PreprocessImage(
@@ -375,19 +378,21 @@ def run(env, q_learning_args, update_args,
     state_shape = env.observation_space.shape
 
     network = network or conv_network
-    frozen_agent = DqnAgent(
-        state_shape, n_actions, network,
-        special={
-            "buffer_len": 0,
-            "lr": initial_lr,
-            "scope": "frozen_q_net",
-            "dueling_network": dueling_network})
-    agent = DqnAgent(
+
+    q_net = DqnAgent(
         state_shape, n_actions, network,
         special={
             "buffer_len": buffer_len,
             "lr": initial_lr,
             "scope": "q_net",
+            "dueling_network": dueling_network})
+
+    target_net = DqnAgent(
+        state_shape, n_actions, network,
+        special={
+            "buffer_len": 0,
+            "lr": initial_lr,
+            "scope": "frozen_q_net",
             "dueling_network": dueling_network})
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
@@ -403,8 +408,8 @@ def run(env, q_learning_args, update_args,
             saver.restore(sess, "{}/model.ckpt".format(model_dir))
 
         stats = q_learning(
-            sess, agent, frozen_agent, env,
-            update_wrapper=update_wrap(**update_args),
+            sess, q_net, target_net, env,
+            update_fn=update_wraper(**update_args),
             **q_learning_args)
         create_if_need(model_dir)
         saver.save(sess, "{}/model.ckpt".format(model_dir))
@@ -416,7 +421,8 @@ def run(env, q_learning_args, update_args,
 
         if api_key is not None:
             env = gym.wrappers.Monitor(env, "{}/monitor".format(model_dir), force=True)
-            sessions = [generate_session(sess, agent, env, 0.0, int(1e10), False)
+            sessions = [generate_session(sess, q_net, target_net, env, 0.0, int(1e10),
+                                         update_fn=None)
                         for _ in range(300)]
             env.close()
             gym.upload("{}/monitor".format(model_dir), api_key=api_key)

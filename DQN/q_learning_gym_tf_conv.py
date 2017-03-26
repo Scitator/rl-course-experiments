@@ -249,10 +249,10 @@ def network_wrapper(activation_fn=tf.tanh):
 
 
 def _parse_args():
-    parser = argparse.ArgumentParser(description='Policy iteration example')
+    parser = argparse.ArgumentParser(description='Doom Q-learning')
     parser.add_argument('--env',
                         type=str,
-                        default='ppaquette/DoomBasic-v0',  # CartPole-v0, MountainCar-v0
+                        default='ppaquette/DoomBasic-v0',
                         help='The environment to use')
     parser.add_argument('--n_epochs',
                         type=int,
