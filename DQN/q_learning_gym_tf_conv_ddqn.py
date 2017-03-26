@@ -184,8 +184,8 @@ def update(sess, q_net, target_net, discount_factor=0.99, batch_size=32):
         best_actions = qvalues.argmax(axis=1)
         qvalues_next = target_net.predict(sess, next_state_batch)
         td_target_batch = reward_batch + \
-                          np.invert(done_batch).astype(np.float32) * \
-                          discount_factor * qvalues_next[np.arange(batch_size), best_actions]
+            np.invert(done_batch).astype(np.float32) * \
+            discount_factor * qvalues_next[np.arange(batch_size), best_actions]
 
         q_loss = q_net.update(sess, state_batch, action_batch, td_target_batch)
 
@@ -309,6 +309,8 @@ def conv_network(states, scope, reuse=False, is_training=True, activation_fn=tf.
         logits = tflayers.fully_connected(
             flat,
             min(512, max(128, flat.get_shape().as_list()[-1])),
+            normalizer_fn=tflayers.batch_norm,
+            normalizer_params={"is_training": is_training},
             activation_fn=activation_fn)
         return logits
 
