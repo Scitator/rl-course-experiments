@@ -81,12 +81,15 @@ class DqnAgent(object):
         self.actions = tf.placeholder(shape=[None], dtype=tf.int32)
         self.td_targets = tf.placeholder(shape=[None], dtype=tf.float32)
 
+        self.is_training = tf.placeholder(dtype=tf.bool)
+
         self.scope = self.special.get("scope", "network")
 
         self.predicted_qvalues = self.qnetwork(
             network,
             self.states,
-            scope=self.scope)
+            scope=self.scope,
+            is_training=self.is_training)
 
         one_hot_actions = tf.one_hot(self.actions, n_actions)
         predicted_qvalues_for_actions = tf.reduce_sum(
@@ -101,8 +104,8 @@ class DqnAgent(object):
             self.loss,
             var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope))
 
-    def qnetwork(self, network, state, scope, reuse=False):
-        hidden_state = network(state, scope=scope + "_hidden", reuse=reuse)
+    def qnetwork(self, network, state, scope, reuse=False, is_training=True):
+        hidden_state = network(state, scope=scope + "_hidden", reuse=reuse, is_training=is_training)
         qvalues = self._qvalues(hidden_state, scope=scope + "_qvalues", reuse=reuse)
 
         if self.special.get("dueling_network", False):
@@ -133,19 +136,21 @@ class DqnAgent(object):
                 activation_fn=None)
             return qvalues
 
-    def predict(self, sess, state_batch):
+    def predict(self, sess, state_batch, is_training=False):
         return sess.run(
             self.predicted_qvalues,
             feed_dict={
-                self.states: state_batch})
+                self.states: state_batch,
+                self.is_training: is_training})
 
-    def update(self, sess, state_batch, action_batch, td_target_batch):
+    def update(self, sess, state_batch, action_batch, td_target_batch, is_training=True):
         q_loss, _ = sess.run(
             [self.loss, self.update_step],
             feed_dict={
                 self.states: state_batch,
                 self.actions: action_batch,
-                self.td_targets: td_target_batch})
+                self.td_targets: td_target_batch,
+                self.is_training: is_training})
         return q_loss
 
     def observe(self, state, action, reward, next_state, done):
@@ -264,22 +269,38 @@ def q_learning(
     return history
 
 
-def conv_network(states, scope, reuse=False, activation_fn=tf.nn.elu):
+def conv_network(states, scope, reuse=False, is_training=True, activation_fn=tf.nn.elu):
     with tf.variable_scope(scope or "network") as scope:
         if reuse:
             scope.reuse_variables()
 
         conv1 = tflayers.conv2d(
-            states, 32, [5, 5], stride=2, padding='SAME', activation_fn=activation_fn)
+            states,
+            32, [5, 5], stride=2, padding='SAME',
+            normalizer_fn=tflayers.batch_norm,
+            normalizer_params={"is_training": is_training},
+            activation_fn=activation_fn)
         conv1 = tflayers.conv2d(
-            conv1, 32, [5, 5], stride=1, padding='VALID', activation_fn=activation_fn)
+            conv1,
+            32, [5, 5], stride=1, padding='VALID',
+            normalizer_fn=tflayers.batch_norm,
+            normalizer_params={"is_training": is_training},
+            activation_fn=activation_fn)
         pool1 = tflayers.max_pool2d(conv1, [3, 3], padding='VALID')
         # pool1 = tflayers.dropout(pool1, keep_prob=keep_prob, is_training=is_training)
 
         conv2 = tflayers.conv2d(
-            pool1, 32, [5, 5], stride=2, padding='SAME', activation_fn=activation_fn)
+            pool1,
+            32, [5, 5], stride=2, padding='SAME',
+            normalizer_fn=tflayers.batch_norm,
+            normalizer_params={"is_training": is_training},
+            activation_fn=activation_fn)
         conv2 = tflayers.conv2d(
-            conv2, 32, [5, 5], stride=1, padding='VALID', activation_fn=activation_fn)
+            conv2,
+            32, [5, 5], stride=1, padding='VALID',
+            normalizer_fn=tflayers.batch_norm,
+            normalizer_params={"is_training": is_training},
+            activation_fn=activation_fn)
         pool2 = tflayers.max_pool2d(conv2, [3, 3], padding='VALID')
         # pool2 = tflayers.dropout(pool2, keep_prob=keep_prob, is_training=is_training)
 
@@ -293,9 +314,8 @@ def conv_network(states, scope, reuse=False, activation_fn=tf.nn.elu):
 
 
 def network_wrapper(activation_fn=tf.nn.elu):
-    def wrapper(states, scope=None, reuse=False):
-        return conv_network(states, scope, reuse, activation_fn=activation_fn)
-
+    def wrapper(states, scope=None, reuse=False, is_training=True):
+        return conv_network(states, scope, reuse, is_training, activation_fn=activation_fn)
     return wrapper
 
 
