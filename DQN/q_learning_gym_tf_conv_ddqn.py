@@ -276,38 +276,27 @@ def conv_network(states, scope, reuse=False, is_training=True, activation_fn=tf.
 
         conv1 = tflayers.conv2d(
             states,
-            32, [5, 5], stride=3, padding='SAME',
-            normalizer_fn=tflayers.batch_norm,
-            normalizer_params={"is_training": is_training},
+            num_outputs=32,
+            kernel_size=8,
+            stride=4,
             activation_fn=activation_fn)
-        conv1 = tflayers.conv2d(
+        conv2 = tflayers.conv2d(
             conv1,
-            32, [5, 5], stride=3, padding='VALID',
-            normalizer_fn=tflayers.batch_norm,
-            normalizer_params={"is_training": is_training},
+            num_outputs=64,
+            kernel_size=4,
+            stride=2,
             activation_fn=activation_fn)
-        pool1 = tflayers.max_pool2d(conv1, [3, 3], padding='VALID')
-        # pool1 = tflayers.dropout(pool1, keep_prob=keep_prob, is_training=is_training)
+        conv3 = tflayers.conv2d(
+            conv2,
+            num_outputs=64,
+            kernel_size=3,
+            stride=1,
+            activation_fn=activation_fn)
 
-        # conv2 = tflayers.conv2d(
-        #     pool1,
-        #     32, [5, 5], stride=2, padding='SAME',
-        #     normalizer_fn=tflayers.batch_norm,
-        #     normalizer_params={"is_training": is_training},
-        #     activation_fn=activation_fn)
-        # conv2 = tflayers.conv2d(
-        #     conv2,
-        #     32, [5, 5], stride=1, padding='VALID',
-        #     normalizer_fn=tflayers.batch_norm,
-        #     normalizer_params={"is_training": is_training},
-        #     activation_fn=activation_fn)
-        # pool2 = tflayers.max_pool2d(conv2, [3, 3], padding='VALID')
-        # pool2 = tflayers.dropout(pool2, keep_prob=keep_prob, is_training=is_training)
-
-        flat = tflayers.flatten(pool1)
+        flat = tflayers.flatten(conv3)
         logits = tflayers.fully_connected(
             flat,
-            256,
+            512,
             normalizer_fn=tflayers.batch_norm,
             normalizer_params={"is_training": is_training},
             activation_fn=activation_fn)
