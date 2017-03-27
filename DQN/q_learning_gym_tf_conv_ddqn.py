@@ -276,39 +276,38 @@ def conv_network(states, scope, reuse=False, is_training=True, activation_fn=tf.
 
         conv1 = tflayers.conv2d(
             states,
-            32, [5, 5], stride=2, padding='SAME',
+            32, [5, 5], stride=3, padding='SAME',
             normalizer_fn=tflayers.batch_norm,
             normalizer_params={"is_training": is_training},
             activation_fn=activation_fn)
         conv1 = tflayers.conv2d(
             conv1,
-            32, [5, 5], stride=1, padding='VALID',
+            32, [5, 5], stride=3, padding='VALID',
             normalizer_fn=tflayers.batch_norm,
             normalizer_params={"is_training": is_training},
             activation_fn=activation_fn)
         pool1 = tflayers.max_pool2d(conv1, [3, 3], padding='VALID')
         # pool1 = tflayers.dropout(pool1, keep_prob=keep_prob, is_training=is_training)
 
-        conv2 = tflayers.conv2d(
-            pool1,
-            32, [5, 5], stride=2, padding='SAME',
-            normalizer_fn=tflayers.batch_norm,
-            normalizer_params={"is_training": is_training},
-            activation_fn=activation_fn)
-        conv2 = tflayers.conv2d(
-            conv2,
-            32, [5, 5], stride=1, padding='VALID',
-            normalizer_fn=tflayers.batch_norm,
-            normalizer_params={"is_training": is_training},
-            activation_fn=activation_fn)
-        pool2 = tflayers.max_pool2d(conv2, [3, 3], padding='VALID')
+        # conv2 = tflayers.conv2d(
+        #     pool1,
+        #     32, [5, 5], stride=2, padding='SAME',
+        #     normalizer_fn=tflayers.batch_norm,
+        #     normalizer_params={"is_training": is_training},
+        #     activation_fn=activation_fn)
+        # conv2 = tflayers.conv2d(
+        #     conv2,
+        #     32, [5, 5], stride=1, padding='VALID',
+        #     normalizer_fn=tflayers.batch_norm,
+        #     normalizer_params={"is_training": is_training},
+        #     activation_fn=activation_fn)
+        # pool2 = tflayers.max_pool2d(conv2, [3, 3], padding='VALID')
         # pool2 = tflayers.dropout(pool2, keep_prob=keep_prob, is_training=is_training)
 
-        flat = tflayers.flatten(pool2)
-
+        flat = tflayers.flatten(pool1)
         logits = tflayers.fully_connected(
             flat,
-            min(512, max(128, flat.get_shape().as_list()[-1])),
+            256,
             normalizer_fn=tflayers.batch_norm,
             normalizer_params={"is_training": is_training},
             activation_fn=activation_fn)
