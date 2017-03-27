@@ -297,8 +297,8 @@ def conv_network(states, scope, reuse=False, is_training=True, activation_fn=tf.
         logits = tflayers.fully_connected(
             flat,
             512,
-            normalizer_fn=tflayers.batch_norm,
-            normalizer_params={"is_training": is_training},
+            # normalizer_fn=tflayers.batch_norm,
+            # normalizer_params={"is_training": is_training},
             activation_fn=activation_fn)
         return logits
 
