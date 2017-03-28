@@ -15,7 +15,7 @@ from matplotlib import pyplot as plt
 
 plt.style.use("ggplot")
 
-from wrappers import PreprocessImage, FrameBuffer
+from wrappers import PreprocessImage, FrameBuffer, EnvPool
 
 
 def copy_model_parameters(sess, net1, net2):
@@ -158,13 +158,13 @@ class DqnAgent(object):
             (state, action, reward, next_state, done))
 
 
-def e_greedy_action(agent, sess, state, epsilon=0.0):
+def e_greedy_actions(agent, sess, state, epsilon=0.0):
     if np.random.rand() < epsilon:
-        action = np.random.choice(agent.n_actions)
+        actions = [np.random.choice(agent.n_actions) for _ in range(len(state))]
     else:
-        qvalues = agent.predict(sess, np.array([state], dtype=np.float32))
-        action = np.argmax(qvalues)
-    return action
+        qvalues = agent.predict(sess, state)
+        actions = qvalues.argmax(axis=1)
+    return actions
 
 
 def update(sess, q_net, target_net, discount_factor=0.99, batch_size=32):
@@ -206,9 +206,9 @@ def generate_session(sess, q_net, target_net, env, epsilon=0.5, t_max=1000, upda
     total_loss = 0
 
     for t in range(t_max):
-        a = e_greedy_action(q_net, sess, s, epsilon)
+        a = e_greedy_actions(q_net, sess, np.array([s], dtype=np.float32), epsilon)[0]
 
-        new_s, r, done, info = env.step(a)
+        new_s, r, done, _ = env.step(a)
 
         if update_fn is not None:
             q_net.observe(s, a, r, new_s, done)
@@ -219,6 +219,33 @@ def generate_session(sess, q_net, target_net, env, epsilon=0.5, t_max=1000, upda
 
         s = new_s
         if done:
+            break
+
+    return total_reward, total_loss / float(t + 1), t
+
+
+def generate_sessions(sess, q_net, target_net, env_pool, epsilon=0.25, t_max=1000, update_fn=None):
+    total_reward = 0
+    total_loss = 0
+    t = 0
+
+    states = env_pool.reset()
+    for t in range(t_max):
+        actions = e_greedy_actions(q_net, sess, states, epsilon)
+
+        new_states, rewards, dones, _ = env_pool.step(actions)
+
+        if update_fn is not None:
+            for s, a, r, new_s, done in zip(states, actions, rewards, new_states, dones):
+                q_net.observe(s, a, r, new_s, done)
+            curr_loss = update_fn(sess, q_net, target_net)
+            total_loss += curr_loss
+
+        total_reward += rewards.mean()
+
+        states = new_states
+        if any(dones):
+            env_pool.close()
             break
 
     return total_reward, total_loss / float(t + 1), t
@@ -246,7 +273,7 @@ def q_learning(
 
     for i in tr:
         sessions = [
-            generate_session(sess, q_net, target_net, env, epsilon, t_max, update_fn=update_fn)
+            generate_sessions(sess, q_net, target_net, env, epsilon, t_max, update_fn=update_fn)
             for _ in range(n_sessions)]
         session_rewards, session_loss, session_steps = map(np.array, zip(*sessions))
 
@@ -274,26 +301,26 @@ def conv_network(states, scope, reuse=False, is_training=True, activation_fn=tf.
         if reuse:
             scope.reuse_variables()
 
-        conv1 = tflayers.conv2d(
+        conv = tflayers.conv2d(
             states,
             num_outputs=32,
             kernel_size=8,
             stride=4,
             activation_fn=activation_fn)
-        conv2 = tflayers.conv2d(
-            conv1,
+        conv = tflayers.conv2d(
+            conv,
             num_outputs=64,
             kernel_size=4,
             stride=2,
             activation_fn=activation_fn)
-        conv3 = tflayers.conv2d(
-            conv2,
+        conv = tflayers.conv2d(
+            conv,
             num_outputs=64,
             kernel_size=3,
             stride=1,
             activation_fn=activation_fn)
 
-        flat = tflayers.flatten(conv3)
+        flat = tflayers.flatten(conv)
         logits = tflayers.fully_connected(
             flat,
             512,
@@ -317,10 +344,10 @@ def _parse_args():
                         help='The environment to use')
     parser.add_argument('--n_epochs',
                         type=int,
-                        default=1000)
+                        default=100)
     parser.add_argument('--n_sessions',
                         type=int,
-                        default=100)
+                        default=16)
     parser.add_argument('--t_max',
                         type=int,
                         default=1000)
@@ -342,7 +369,7 @@ def _parse_args():
                         default=64)
     parser.add_argument('--buffer_len',
                         type=int,
-                        default=100000)
+                        default=10000)
     parser.add_argument('--initial_epsilon',
                         type=float,
                         default=0.25,
@@ -375,13 +402,16 @@ def run(env, q_learning_args, update_args,
     env_name = env
     height, width = 84, 84
     n_frames = 4
-    make_env = lambda: FrameBuffer(
-        PreprocessImage(
-            SkipWrapper(4)(gym.make(env_name)),
-            width=width, height=height, grayscale=True,
-            crop=lambda img: img[20:-10, 8:-8]),
-        n_frames=n_frames,
-        reshape_fn=lambda x: np.transpose(x, [1, 2, 3, 0]).reshape(height, width, n_frames))
+    make_env = lambda: EnvPool(
+        FrameBuffer(
+            PreprocessImage(
+                SkipWrapper(4)(gym.make(env_name)),
+                width=width, height=height, grayscale=True,
+                crop=lambda img: img[20:-10, 8:-8]),
+            n_frames=n_frames,
+            reshape_fn=lambda x: np.transpose(x, [1, 2, 3, 0]).reshape(height, width, n_frames)),
+        n_envs=q_learning_args["n_sessions"])
+
     env = make_env()
 
     n_actions = env.action_space.n

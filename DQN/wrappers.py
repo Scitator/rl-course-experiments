@@ -52,3 +52,32 @@ class FrameBuffer(Wrapper):
     def update_buffer(self, obs):
         """push new observation to the buffer, remove the earliest one"""
         self.framebuffer = np.vstack([obs[None], self.framebuffer[:-1]])
+
+
+class EnvPool(Wrapper):
+    def __init__(self, env, n_envs=16):
+        super(EnvPool, self).__init__(env)
+        self.n_envs = n_envs
+        self.envs = [env] * n_envs
+        self.env_shape = env.observation_space.shape
+
+    def reset(self):
+        result = np.zeros(shape=[self.n_envs, ] + list(self.env_shape), dtype=np.float32)
+        for i, env in enumerate(self.envs):
+            result[i] = env.reset()
+        return result
+
+    def step(self, actions):
+        new_states = np.zeros(shape=[self.n_envs, ] + list(self.env_shape), dtype=np.float32)
+        rewards = np.zeros(shape=[self.n_envs], dtype=np.float32)
+        dones = np.zeros(shape=[self.n_envs], dtype=np.bool)
+        for i, env in enumerate(self.envs):
+            new_s, r, done, _ = self.envs[i].step(actions[i])
+            new_states[i] = new_s
+            rewards[i] = r
+            dones[i] = done
+        return new_states, rewards, dones, None
+
+    def close(self):
+        for env in self.envs:
+            env.close()
