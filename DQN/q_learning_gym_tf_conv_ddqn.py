@@ -234,33 +234,33 @@ def epsilon_greedy_policy(agent, sess, observations, epsilon):
     return actions
 
 
-def generate_sessions(sess, q_net, target_net, env_pool, epsilon=0.25, t_max=1000, update_fn=None):
-    total_reward = 0
-    total_loss = 0
-    t = 0
-
-    dones = [False]
-    states = env_pool.reset()
-    for t in range(t_max):
-        if any(dones):
-            reset_states = env_pool.reset(dones)
-            all_states = [np.expand_dims(reset_row, 0) if done else np.expand_dims(row, 0)
-                          for done, reset_row, row in zip(dones, reset_states, states)]
-            states = np.vstack(all_states)
-
-        actions = epsilon_greedy_policy(q_net, sess, states, epsilon)
-
-        new_states, rewards, dones, _ = env_pool.step(actions)
-
-        if update_fn is not None:
-            for s, a, r, new_s, done in zip(states, actions, rewards, new_states, dones):
-                q_net.observe(s, a, r, new_s, done)
-            curr_loss = update_fn(sess, q_net, target_net)
-            total_loss += curr_loss
-
-        total_reward += rewards.sum()
-
-    return total_reward, total_loss / float(t + 1), t
+# def generate_sessions(sess, q_net, target_net, env_pool, epsilon=0.25, t_max=1000, update_fn=None):
+#     total_reward = 0
+#     total_loss = 0
+#     t = 0
+#
+#     dones = [False]
+#     states = env_pool.reset()
+#     for t in range(t_max):
+#         if any(dones):
+#             reset_states = env_pool.reset(dones)
+#             all_states = [np.expand_dims(reset_row, 0) if done else np.expand_dims(row, 0)
+#                           for done, reset_row, row in zip(dones, reset_states, states)]
+#             states = np.vstack(all_states)
+#
+#         actions = epsilon_greedy_policy(q_net, sess, states, epsilon)
+#
+#         new_states, rewards, dones, _ = env_pool.step(actions)
+#
+#         if update_fn is not None:
+#             for s, a, r, new_s, done in zip(states, actions, rewards, new_states, dones):
+#                 q_net.observe(s, a, r, new_s, done)
+#             curr_loss = update_fn(sess, q_net, target_net)
+#             total_loss += curr_loss
+#
+#         total_reward += rewards.sum()
+#
+#     return total_reward, total_loss / float(t + 1), t
 
 
 def q_learning(
@@ -283,11 +283,31 @@ def q_learning(
         "steps": np.zeros(n_epochs),
     }
 
+    dones = [False]
+    states = env.reset()
+
     for i in tr:
-        sessions = [
-            generate_sessions(sess, q_net, target_net, env, epsilon, t_max, update_fn=update_fn)
-            for _ in range(n_sessions)]
-        session_rewards, session_loss, session_steps = map(np.array, zip(*sessions))
+        total_reward = 0.0
+        total_loss = 0.0
+        for t in range(t_max):
+            if any(dones):
+                reset_states = env.reset(dones)
+                all_states = [np.expand_dims(reset_row, 0) if done else np.expand_dims(row, 0)
+                              for done, reset_row, row in zip(dones, reset_states, states)]
+                states = np.vstack(all_states)
+
+            actions = epsilon_greedy_policy(q_net, sess, states, epsilon)
+
+            new_states, rewards, dones, _ = env.step(actions)
+
+            if update_fn is not None:
+                for s, a, r, new_s, done in zip(states, actions, rewards, new_states, dones):
+                    q_net.observe(s, a, r, new_s, done)
+                curr_loss = update_fn(sess, q_net, target_net)
+                total_loss += curr_loss
+
+            total_reward += rewards.mean()
+        # session_rewards, session_loss, session_steps = map(np.array, zip(*sessions))
 
         if i < n_epochs_decay:
             epsilon -= (initial_epsilon - final_epsilon) / float(n_epochs_decay)
@@ -295,15 +315,13 @@ def q_learning(
         if (i + 1) % n_epochs_skip == 0:
             copy_model_parameters(sess, q_net, target_net)
 
-        history["reward"][i] = np.mean(session_rewards)
+        history["reward"][i] = np.mean(total_reward)
         history["epsilon"][i] = epsilon
-        history["loss"][i] = np.mean(session_loss)
-        history["steps"][i] = np.mean(session_steps)
+        history["loss"][i] = np.mean(total_loss)
 
         tr.set_description(
-            "mean reward = {:.3f}\tepsilon = {:.3f}\tloss = {:.3f}\tsteps = {:.3f}".format(
-                history["reward"][i], history["epsilon"][i], history["loss"][i],
-                history["steps"][i]))
+            "mean reward = {:.3f}\tepsilon = {:.3f}\tloss = {:.3f}".format(
+                history["reward"][i], history["epsilon"][i], history["loss"][i]))
 
     return history
 
@@ -423,7 +441,7 @@ def run(env, q_learning_args, update_args,
                 crop=lambda img: img[20:-10, 8:-8]),
             n_frames=n_frames,
             reshape_fn=lambda x: np.transpose(x, [1, 2, 3, 0]).reshape(height, width, n_frames)),
-        n_envs=update_args["batch_size"])
+        n_envs=q_learning_args["n_sessions"])
 
     env = make_env()
 
