@@ -63,14 +63,19 @@ class EnvPool(Wrapper):
         self.env_shape = env.observation_space.shape
         self.recreate_envs()
 
-    def recreate_envs(self):
-        self.envs = [copy(self.initial_env) for _ in range(self.n_envs)]
+    def recreate_envs(self, done_mask=None):
+        if done_mask is None:
+            self.envs = [copy(self.initial_env) for _ in range(self.n_envs)]
+        else:
+            self.envs = [copy(self.initial_env) if done_mask[i] else self.envs[i]
+                         for i in range(self.n_envs)]
 
-    def reset(self):
-        self.recreate_envs()
+    def reset(self, done_mask=None):
+        self.recreate_envs(done_mask)
         result = np.zeros(shape=[self.n_envs, ] + list(self.env_shape), dtype=np.float32)
         for i, env in enumerate(self.envs):
-            result[i] = env.reset()
+            if done_mask is None or done_mask[i]:
+                result[i] = env.reset()
         return result
 
     def step(self, actions):
@@ -82,7 +87,7 @@ class EnvPool(Wrapper):
             new_states[i] = new_s
             rewards[i] = r
             dones[i] = done
-        self.envs = [env for env, done  in zip(self.envs, dones) if not done]
+        # self.envs = [env for env, done in zip(self.envs, dones) if not done]
         return new_states, rewards, dones, None
 
     def close(self):

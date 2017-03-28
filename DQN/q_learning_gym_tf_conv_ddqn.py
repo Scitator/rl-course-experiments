@@ -71,7 +71,7 @@ activations = {
 
 
 class DqnAgent(object):
-    def __init__(self, state_shape, n_actions, network,special=None):
+    def __init__(self, state_shape, n_actions, network, special=None):
         self.special = special or {}
         self.state_shape = state_shape
         self.n_actions = n_actions
@@ -184,8 +184,8 @@ def update(sess, q_net, target_net, discount_factor=0.99, batch_size=32):
         best_actions = qvalues.argmax(axis=1)
         qvalues_next = target_net.predict(sess, next_state_batch)
         td_target_batch = reward_batch + \
-            np.invert(done_batch).astype(np.float32) * \
-            discount_factor * qvalues_next[np.arange(batch_size), best_actions]
+                          np.invert(done_batch).astype(np.float32) * \
+                          discount_factor * qvalues_next[np.arange(batch_size), best_actions]
 
         q_loss = q_net.update(sess, state_batch, action_batch, td_target_batch)
 
@@ -195,6 +195,7 @@ def update(sess, q_net, target_net, discount_factor=0.99, batch_size=32):
 def update_wraper(discount_factor=0.99, batch_size=32):
     def wrapper(sess, q_net, target_net):
         return update(sess, q_net, target_net, discount_factor, batch_size)
+
     return wrapper
 
 
@@ -224,14 +225,30 @@ def generate_session(sess, q_net, target_net, env, epsilon=0.5, t_max=1000, upda
     return total_reward, total_loss / float(t + 1), t
 
 
+def epsilon_greedy_policy(agent, sess, observations, epsilon):
+    A = np.ones(shape=(len(observations), agent.n_actions), dtype=float) * epsilon / agent.n_actions
+    q_values = agent.predict(sess, observations)
+    best_actions = np.argmax(q_values, axis=1)
+    A[:, best_actions] += (1.0 - epsilon)
+    actions = [np.random.choice(len(row), p=row) for row in A]
+    return actions
+
+
 def generate_sessions(sess, q_net, target_net, env_pool, epsilon=0.25, t_max=1000, update_fn=None):
     total_reward = 0
     total_loss = 0
     t = 0
 
+    dones = [False]
     states = env_pool.reset()
     for t in range(t_max):
-        actions = e_greedy_actions(q_net, sess, states, epsilon)
+        if any(dones):
+            reset_states = env_pool.reset(dones)
+            all_states = [np.expand_dims(reset_row, 0) if done else np.expand_dims(row, 0)
+                          for done, reset_row, row in zip(dones, reset_states, states)]
+            states = np.vstack(all_states)
+
+        actions = epsilon_greedy_policy(q_net, sess, states, epsilon)
 
         new_states, rewards, dones, _ = env_pool.step(actions)
 
@@ -241,13 +258,7 @@ def generate_sessions(sess, q_net, target_net, env_pool, epsilon=0.25, t_max=100
             curr_loss = update_fn(sess, q_net, target_net)
             total_loss += curr_loss
 
-        total_reward += rewards.mean()
-
-        states = new_states[np.invert(dones)]
-
-        if len(states) < env_pool.min_n_envs:
-            env_pool.close()
-            break
+        total_reward += rewards.sum()
 
     return total_reward, total_loss / float(t + 1), t
 
@@ -334,6 +345,7 @@ def conv_network(states, scope, reuse=False, is_training=True, activation_fn=tf.
 def network_wrapper(activation_fn=tf.nn.elu):
     def wrapper(states, scope=None, reuse=False, is_training=True):
         return conv_network(states, scope, reuse, is_training, activation_fn=activation_fn)
+
     return wrapper
 
 
