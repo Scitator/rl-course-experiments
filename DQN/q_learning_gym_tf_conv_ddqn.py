@@ -287,8 +287,8 @@ def q_learning(
     states = env.reset()
 
     for i in tr:
-        total_reward = 0.0
-        total_loss = 0.0
+        total_reward = np.zeros(t_max)
+        total_loss = np.zeros(t_max)
         for t in range(t_max):
             if any(dones):
                 reset_states = env.reset(dones)
@@ -304,9 +304,9 @@ def q_learning(
                 for s, a, r, new_s, done in zip(states, actions, rewards, new_states, dones):
                     q_net.observe(s, a, r, new_s, done)
                 curr_loss = update_fn(sess, q_net, target_net)
-                total_loss += curr_loss
+                total_loss[t] = curr_loss
 
-            total_reward += rewards.mean()
+            total_reward[t] = rewards.mean()
         # session_rewards, session_loss, session_steps = map(np.array, zip(*sessions))
 
         if i < n_epochs_decay:
