@@ -3,7 +3,7 @@ import numpy as np
 from scipy.misc import imresize
 from gym.core import ObservationWrapper,Wrapper
 from gym.spaces.box import Box
-
+from copy import copy
 
 class PreprocessImage(ObservationWrapper):
     def __init__(self, env, height=64, width=64, grayscale=True,
@@ -55,13 +55,19 @@ class FrameBuffer(Wrapper):
 
 
 class EnvPool(Wrapper):
-    def __init__(self, env, n_envs=16):
+    def __init__(self, env, n_envs=16, min_n_envs=None):
         super(EnvPool, self).__init__(env)
+        self.initial_env = env
         self.n_envs = n_envs
-        self.envs = [env] * n_envs
+        self.min_n_envs = (min_n_envs or n_envs // 4)
         self.env_shape = env.observation_space.shape
+        self.recreate_envs()
+
+    def recreate_envs(self):
+        self.envs = [copy(self.initial_env) for _ in range(self.n_envs)]
 
     def reset(self):
+        self.recreate_envs()
         result = np.zeros(shape=[self.n_envs, ] + list(self.env_shape), dtype=np.float32)
         for i, env in enumerate(self.envs):
             result[i] = env.reset()
@@ -76,6 +82,7 @@ class EnvPool(Wrapper):
             new_states[i] = new_s
             rewards[i] = r
             dones[i] = done
+        self.envs = [env for env, done  in zip(self.envs, dones) if not done]
         return new_states, rewards, dones, None
 
     def close(self):

@@ -243,8 +243,9 @@ def generate_sessions(sess, q_net, target_net, env_pool, epsilon=0.25, t_max=100
 
         total_reward += rewards.mean()
 
-        states = new_states
-        if any(dones):
+        states = new_states[np.invert(dones)]
+
+        if len(states) < env_pool.min_n_envs:
             env_pool.close()
             break
 
@@ -410,7 +411,7 @@ def run(env, q_learning_args, update_args,
                 crop=lambda img: img[20:-10, 8:-8]),
             n_frames=n_frames,
             reshape_fn=lambda x: np.transpose(x, [1, 2, 3, 0]).reshape(height, width, n_frames)),
-        n_envs=q_learning_args["n_sessions"])
+        n_envs=update_args["batch_size"])
 
     env = make_env()
 
@@ -460,6 +461,7 @@ def run(env, q_learning_args, update_args,
             save_stats(stats, save_dir=stats_dir)
 
         if api_key is not None:
+            env = env.env
             env = gym.wrappers.Monitor(env, "{}/monitor".format(model_dir), force=True)
             sessions = [generate_session(sess, q_net, target_net, env, 0.0, int(1e10),
                                          update_fn=None)
