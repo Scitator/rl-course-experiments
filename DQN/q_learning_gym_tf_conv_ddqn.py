@@ -234,35 +234,6 @@ def epsilon_greedy_policy(agent, sess, observations, epsilon):
     return actions
 
 
-# def generate_sessions(sess, q_net, target_net, env_pool, epsilon=0.25, t_max=1000, update_fn=None):
-#     total_reward = 0
-#     total_loss = 0
-#     t = 0
-#
-#     dones = [False]
-#     states = env_pool.reset()
-#     for t in range(t_max):
-#         if any(dones):
-#             reset_states = env_pool.reset(dones)
-#             all_states = [np.expand_dims(reset_row, 0) if done else np.expand_dims(row, 0)
-#                           for done, reset_row, row in zip(dones, reset_states, states)]
-#             states = np.vstack(all_states)
-#
-#         actions = epsilon_greedy_policy(q_net, sess, states, epsilon)
-#
-#         new_states, rewards, dones, _ = env_pool.step(actions)
-#
-#         if update_fn is not None:
-#             for s, a, r, new_s, done in zip(states, actions, rewards, new_states, dones):
-#                 q_net.observe(s, a, r, new_s, done)
-#             curr_loss = update_fn(sess, q_net, target_net)
-#             total_loss += curr_loss
-#
-#         total_reward += rewards.sum()
-#
-#     return total_reward, total_loss / float(t + 1), t
-
-
 def q_learning(
         sess, q_net, target_net, env, update_fn,
         n_epochs=1000, n_epochs_skip=10, n_sessions=100, t_max=1000,
@@ -289,8 +260,10 @@ def q_learning(
     for i in tr:
         total_reward = np.zeros(t_max)
         total_loss = np.zeros(t_max)
+        total_games = 0.0
         for t in range(t_max):
             if any(dones):
+                total_games += sum(dones)
                 reset_states = env.reset(dones)
                 all_states = [np.expand_dims(reset_row, 0) if done else np.expand_dims(row, 0)
                               for done, reset_row, row in zip(dones, reset_states, states)]
@@ -307,7 +280,6 @@ def q_learning(
                 total_loss[t] = curr_loss
 
             total_reward[t] = rewards.mean()
-        # session_rewards, session_loss, session_steps = map(np.array, zip(*sessions))
 
         if i < n_epochs_decay:
             epsilon -= (initial_epsilon - final_epsilon) / float(n_epochs_decay)
@@ -318,10 +290,12 @@ def q_learning(
         history["reward"][i] = np.mean(total_reward)
         history["epsilon"][i] = epsilon
         history["loss"][i] = np.mean(total_loss)
+        history["steps"][i] = float(t_max * n_sessions) / float(total_games)
 
         tr.set_description(
-            "mean reward = {:.3f}\tepsilon = {:.3f}\tloss = {:.3f}".format(
-                history["reward"][i], history["epsilon"][i], history["loss"][i]))
+            "mean reward = {:.3f}\tepsilon = {:.3f}\tloss = {:.3f}\tsteps = {:.3f}".format(
+                history["reward"][i], history["epsilon"][i], history["loss"][i],
+                history["steps"][i]))
 
     return history
 
