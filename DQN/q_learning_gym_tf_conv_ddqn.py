@@ -237,7 +237,6 @@ def epsilon_greedy_policy(agent, sess, observations, epsilon):
 def generate_sessions(sess, q_net, target_net, env_pool, epsilon=0.25, t_max=1000, update_fn=None):
     total_reward = 0
     total_loss = 0
-    t = 0
 
     states = env_pool.reset()
     for t in range(t_max):
