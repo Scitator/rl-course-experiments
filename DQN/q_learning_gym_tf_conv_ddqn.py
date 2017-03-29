@@ -8,7 +8,7 @@ import argparse
 import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.layers as tflayers
-from tqdm import trange
+from tqdm import trange, tqdm
 import collections
 
 from matplotlib import pyplot as plt
@@ -170,7 +170,7 @@ def e_greedy_actions(agent, sess, state, epsilon=0.0):
 def update(sess, q_net, target_net, discount_factor=0.99, batch_size=32):
     q_loss = 0.0
 
-    if len(q_net.buffer) > batch_size:
+    if len(q_net.buffer) >= batch_size:
         batch_ids = np.random.choice(len(q_net.buffer), batch_size)
         batch = np.array([q_net.buffer[i] for i in batch_ids])
 
@@ -237,7 +237,7 @@ def epsilon_greedy_policy(agent, sess, observations, epsilon):
 def q_learning(
         sess, q_net, target_net, env, update_fn,
         n_epochs=1000, n_epochs_skip=10, n_sessions=100, t_max=1000,
-        initial_epsilon=0.25, final_epsilon=0.01):
+        initial_epsilon=0.25, final_epsilon=0.01, n_updates=10):
     tr = trange(
         n_epochs,
         desc="mean reward = {:.3f}\tepsilon = {:.3f}\tloss = {:.3f}\tsteps = {:.3f}".format(
@@ -261,7 +261,7 @@ def q_learning(
         total_reward = 0.0
         total_loss = 0.0
         total_games = 0.0
-        for t in range(t_max):
+        for t in tqdm(range(t_max)):
             if any(dones):
                 total_games += sum(dones)
                 reset_states = env.reset(dones)
@@ -276,7 +276,7 @@ def q_learning(
             if update_fn is not None:
                 for s, a, r, new_s, done in zip(states, actions, rewards, new_states, dones):
                     q_net.observe(s, a, r, new_s, done)
-                curr_loss = update_fn(sess, q_net, target_net)
+                curr_loss = np.mean([update_fn(sess, q_net, target_net) for _ in range(n_updates)])
                 total_loss += curr_loss
 
             total_reward += rewards.mean()
@@ -377,8 +377,11 @@ def _parse_args():
                         default=10000)
     parser.add_argument('--initial_epsilon',
                         type=float,
-                        default=0.25,
+                        default=1.0,
                         help='Gamma discount factor')
+    parser.add_argument('--final_epsilon',
+                        type=float,
+                        default=0.01)
     parser.add_argument('--load',
                         action='store_true',
                         default=False)
@@ -391,6 +394,9 @@ def _parse_args():
     parser.add_argument('--n_epochs_skip',
                         type=int,
                         default=1)
+    parser.add_argument('--n_updates',
+                        type=int,
+                        default=10)
     parser.add_argument('--dueling_network',
                         action='store_true',
                         default=False)
@@ -483,6 +489,8 @@ def main():
         "n_sessions": args.n_sessions,
         "t_max": args.t_max,
         "initial_epsilon": args.initial_epsilon,
+        "final_epsilon": args.final_epsilon,
+        "n_updates": args.n_updates
     }
     update_args = {
         "discount_factor": args.gamma,

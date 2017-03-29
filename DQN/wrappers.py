@@ -71,7 +71,6 @@ class EnvPool(Wrapper):
                          for i in range(self.n_envs)]
 
     def reset(self, done_mask=None):
-        self.recreate_envs(done_mask)
         result = np.zeros(shape=[self.n_envs, ] + list(self.env_shape), dtype=np.float32)
         for i, env in enumerate(self.envs):
             if done_mask is None or done_mask[i]:
