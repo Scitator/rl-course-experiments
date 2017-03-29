@@ -425,7 +425,7 @@ def run(env, q_learning_args, update_args,
     make_env = lambda: EnvPool(
         FrameBuffer(
             PreprocessImage(
-                SkipWrapper(4)(gym.make(env_name)),
+                gym.make(env_name),
                 width=width, height=height, grayscale=True,
                 crop=lambda img: img[20:-10, 8:-8]),
             n_frames=n_frames,
