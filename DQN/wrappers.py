@@ -73,12 +73,12 @@ class EnvPool(Wrapper):
             self.envs = np.array(
                 [copy(self.initial_env) if done_mask[i] else self.envs[i]
                 for i in range(self.n_envs)])
-        self.dones_env = np.array([False] * self.n_envs)
 
     def reset(self):
         result = np.zeros(shape=[self.n_envs, ] + list(self.env_shape), dtype=np.float32)
         for i, env in enumerate(self.envs):
             result[i] = env.reset()
+        self.dones_env = np.array([False] * self.n_envs)
         return result
 
     def step(self, actions):
@@ -87,11 +87,12 @@ class EnvPool(Wrapper):
             new_states = np.zeros(shape=(curr_n_env, ) + tuple(self.env_shape), dtype=np.float32)
             rewards = np.zeros(shape=curr_n_env, dtype=np.float32)
             dones = np.ones(shape=curr_n_env, dtype=np.bool)
-            for i, env in enumerate(self.envs[self.dones_env]):
+            for i, env in enumerate(self.envs[np.invert(self.dones_env)]):
                 new_s, r, done, _ = env.step(actions[i])
                 new_states[i] = new_s
                 rewards[i] = r
                 dones[i] = done
+            self.dones_env[np.invert(self.dones_env)] = dones
         else:
             raise NotImplemented()
         return new_states, rewards, dones, None

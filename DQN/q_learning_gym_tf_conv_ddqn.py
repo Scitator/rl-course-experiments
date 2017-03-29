@@ -229,7 +229,8 @@ def epsilon_greedy_policy(agent, sess, observations, epsilon):
     A = np.ones(shape=(len(observations), agent.n_actions), dtype=float) * epsilon / agent.n_actions
     q_values = agent.predict(sess, observations)
     best_actions = np.argmax(q_values, axis=1)
-    A[:, best_actions] += (1.0 - epsilon)
+    for i, action in enumerate(best_actions):
+        A[i, action] += (1.0 - epsilon)
     actions = [np.random.choice(len(row), p=row) for row in A]
     return actions
 
@@ -242,9 +243,8 @@ def generate_sessions(sess, q_net, target_net, env_pool, epsilon=0.25, t_max=100
     states = env_pool.reset()
     for t in range(t_max):
         actions = epsilon_greedy_policy(q_net, sess, states, epsilon)
-
         new_states, rewards, dones, _ = env_pool.step(actions)
-
+        
         if update_fn is not None:
             for s, a, r, new_s, done in zip(states, actions, rewards, new_states, dones):
                 q_net.observe(s, a, r, new_s, done)
@@ -253,11 +253,12 @@ def generate_sessions(sess, q_net, target_net, env_pool, epsilon=0.25, t_max=100
 
         states = new_states[np.invert(dones)]
 
+        total_reward += rewards.sum()
+        
         if len(states) < env_pool.min_n_envs:
             break
 
-        total_reward += rewards.sum()
-
+    
     return total_reward, total_loss / float(t + 1), t
 
 
