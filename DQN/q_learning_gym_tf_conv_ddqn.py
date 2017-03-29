@@ -234,6 +234,33 @@ def epsilon_greedy_policy(agent, sess, observations, epsilon):
     return actions
 
 
+def generate_sessions(sess, q_net, target_net, env_pool, epsilon=0.25, t_max=1000, update_fn=None):
+    total_reward = 0
+    total_loss = 0
+    t = 0
+
+    states = env_pool.reset()
+    for t in range(t_max):
+        actions = epsilon_greedy_policy(q_net, sess, states, epsilon)
+
+        new_states, rewards, dones, _ = env_pool.step(actions)
+
+        if update_fn is not None:
+            for s, a, r, new_s, done in zip(states, actions, rewards, new_states, dones):
+                q_net.observe(s, a, r, new_s, done)
+            curr_loss = update_fn(sess, q_net, target_net)
+            total_loss += curr_loss
+
+        states = new_states[np.invert(dones)]
+
+        if len(states) < env_pool.min_n_envs:
+            break
+
+        total_reward += rewards.sum()
+
+    return total_reward, total_loss / float(t + 1), t
+
+
 def q_learning(
         sess, q_net, target_net, env, update_fn,
         n_epochs=1000, n_epochs_skip=10, n_sessions=100, t_max=1000,
@@ -254,32 +281,12 @@ def q_learning(
         "steps": np.zeros(n_epochs),
     }
 
-    dones = [False]
-    states = env.reset()
-
+    copy_model_parameters(sess, q_net, target_net)
     for i in tr:
-        total_reward = 0.0
-        total_loss = 0.0
-        total_games = 0.0
-        for t in tqdm(range(t_max)):
-            if any(dones):
-                total_games += sum(dones)
-                reset_states = env.reset(dones)
-                all_states = [np.expand_dims(reset_row, 0) if done else np.expand_dims(row, 0)
-                              for done, reset_row, row in zip(dones, reset_states, states)]
-                states = np.vstack(all_states)
-
-            actions = epsilon_greedy_policy(q_net, sess, states, epsilon)
-
-            new_states, rewards, dones, _ = env.step(actions)
-
-            if update_fn is not None:
-                for s, a, r, new_s, done in zip(states, actions, rewards, new_states, dones):
-                    q_net.observe(s, a, r, new_s, done)
-                curr_loss = np.mean([update_fn(sess, q_net, target_net) for _ in range(n_updates)])
-                total_loss += curr_loss
-
-            total_reward += rewards.mean()
+        sessions = [
+            generate_sessions(sess, q_net, target_net, env, epsilon, t_max, update_fn=update_fn)
+            for _ in range(n_updates)]
+        session_rewards, session_loss, session_steps = map(np.array, zip(*sessions))
 
         if i < n_epochs_decay:
             epsilon -= (initial_epsilon - final_epsilon) / float(n_epochs_decay)
@@ -287,16 +294,17 @@ def q_learning(
         if (i + 1) % n_epochs_skip == 0:
             copy_model_parameters(sess, q_net, target_net)
 
-        history["reward"][i] = total_reward / float(t_max)
+        history["reward"][i] = np.mean(session_rewards)
         history["epsilon"][i] = epsilon
-        history["loss"][i] = total_loss / float(t_max)
-        history["steps"][i] = float(t_max * n_sessions) / float(total_games)
+        history["loss"][i] = np.mean(session_loss)
+        history["steps"][i] = np.mean(session_steps)
 
         tr.set_description(
             "mean reward = {:.3f}\tepsilon = {:.3f}\tloss = {:.3f}\tsteps = {:.3f}".format(
                 history["reward"][i], history["epsilon"][i], history["loss"][i],
                 history["steps"][i]))
 
+    copy_model_parameters(sess, q_net, target_net)
     return history
 
 
@@ -352,7 +360,7 @@ def _parse_args():
                         default=100)
     parser.add_argument('--n_sessions',
                         type=int,
-                        default=16)
+                        default=128)
     parser.add_argument('--t_max',
                         type=int,
                         default=1000)
@@ -393,10 +401,10 @@ def _parse_args():
                         default=1e-4)
     parser.add_argument('--n_epochs_skip',
                         type=int,
-                        default=1)
+                        default=2)
     parser.add_argument('--n_updates',
                         type=int,
-                        default=10)
+                        default=100)
     parser.add_argument('--dueling_network',
                         action='store_true',
                         default=False)
@@ -473,7 +481,7 @@ def run(env, q_learning_args, update_args,
         if api_key is not None:
             env = env.env
             env = gym.wrappers.Monitor(env, "{}/monitor".format(model_dir), force=True)
-            sessions = [generate_session(sess, q_net, target_net, env, 0.0, int(1e10),
+            sessions = [generate_session(sess, q_net, target_net, env, 0.01, int(1e10),
                                          update_fn=None)
                         for _ in range(300)]
             env.close()

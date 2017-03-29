@@ -59,34 +59,41 @@ class EnvPool(Wrapper):
         super(EnvPool, self).__init__(env)
         self.initial_env = env
         self.n_envs = n_envs
-        self.min_n_envs = (min_n_envs or n_envs // 4)
+        self.min_n_envs = (min_n_envs or 1)
         self.env_shape = env.observation_space.shape
+        self.envs = []
+        self.dones_env = []
         self.recreate_envs()
 
     def recreate_envs(self, done_mask=None):
+        self.close()
         if done_mask is None:
-            self.envs = [copy(self.initial_env) for _ in range(self.n_envs)]
+            self.envs = np.array([copy(self.initial_env) for _ in range(self.n_envs)])
         else:
-            self.envs = [copy(self.initial_env) if done_mask[i] else self.envs[i]
-                         for i in range(self.n_envs)]
+            self.envs = np.array(
+                [copy(self.initial_env) if done_mask[i] else self.envs[i]
+                for i in range(self.n_envs)])
+        self.dones_env = np.array([False] * self.n_envs)
 
-    def reset(self, done_mask=None):
+    def reset(self):
         result = np.zeros(shape=[self.n_envs, ] + list(self.env_shape), dtype=np.float32)
         for i, env in enumerate(self.envs):
-            if done_mask is None or done_mask[i]:
-                result[i] = env.reset()
+            result[i] = env.reset()
         return result
 
     def step(self, actions):
-        new_states = np.zeros(shape=[self.n_envs, ] + list(self.env_shape), dtype=np.float32)
-        rewards = np.zeros(shape=[self.n_envs], dtype=np.float32)
-        dones = np.zeros(shape=[self.n_envs], dtype=np.bool)
-        for i, env in enumerate(self.envs):
-            new_s, r, done, _ = self.envs[i].step(actions[i])
-            new_states[i] = new_s
-            rewards[i] = r
-            dones[i] = done
-        # self.envs = [env for env, done in zip(self.envs, dones) if not done]
+        curr_n_env = np.sum(np.invert(self.dones_env))
+        if len(actions) == curr_n_env:
+            new_states = np.zeros(shape=(curr_n_env, ) + tuple(self.env_shape), dtype=np.float32)
+            rewards = np.zeros(shape=curr_n_env, dtype=np.float32)
+            dones = np.ones(shape=curr_n_env, dtype=np.bool)
+            for i, env in enumerate(self.envs[self.dones_env]):
+                new_s, r, done, _ = env.step(actions[i])
+                new_states[i] = new_s
+                rewards[i] = r
+                dones[i] = done
+        else:
+            raise NotImplemented()
         return new_states, rewards, dones, None
 
     def close(self):
