@@ -70,61 +70,152 @@ activations = {
 }
 
 
-class AACAgent(object):
+class ObservationsBuffer(object):
+    def __init__(self, buffer_len=10000):
+        self.buffer = collections.deque(maxlen=buffer_len)
+
+    def observe(self, state, action, reward, next_state, done):
+        self.buffer.append(
+            (state, action, reward, next_state, done))
+
+    def get_batch(self, batch_size):
+        batch_ids = np.random.choice(len(self.buffer), batch_size)
+        batch = np.array([self.buffer[i] for i in batch_ids])
+        return batch
+
+
+class PolicyAgent(object):
     def __init__(self, state_shape, n_actions, network, special=None):
         self.special = special or {}
         self.state_shape = state_shape
         self.n_actions = n_actions
-        self.buffer = collections.deque(maxlen=self.special.get("buffer_len", 10000))
 
         self.states = tf.placeholder(shape=(None,) + state_shape, dtype=tf.float32)
         self.actions = tf.placeholder(shape=[None], dtype=tf.int32)
+        self.cumulative_rewards = tf.placeholder(shape=[None], dtype=tf.float32)
+        self.is_training = tf.placeholder(dtype=tf.bool)
+
+        self.scope = self.special.get("scope", "network")
+
+        hidden_state = network(
+            self.states,
+            scope=self.scope + "_hidden",
+            reuse=self.special.get("reuse_hidden", False),
+            is_training=self.is_training)
+
+        self.predicted_probs = self._probs(
+            hidden_state,
+            scope=self.scope + "_probs",
+            reuse=self.special.get("reuse_probs", False))
+
+        one_hot_actions = tf.one_hot(self.actions, n_actions)
+        predicted_probs_for_actions = tf.reduce_sum(
+            tf.multiply(self.predicted_probs, one_hot_actions),
+            axis=-1)
+
+        J = tf.reduce_mean(tf.log(predicted_probs_for_actions) * self.cumulative_rewards)
+        self.loss = -J
+
+        # a bit of regularization
+        if self.special.get("entropy_loss", True):
+            H = tf.reduce_mean(
+                tf.reduce_sum(
+                    self.predicted_probs * tf.log(self.predicted_probs),
+                    axis=-1))
+            self.loss += H * 0.001
+
+        optim = tf.train.AdamOptimizer(self.special.get("policy_lr", 1e-4))
+
+        with tf.variable_scope(self.scope + "_hidden") as scope:
+            if self.special.get("reuse_hidden", False):
+                scope.reuse_variables()
+            self.hidden_state_update = optim.minimize(
+                self.loss,
+                var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
+                                           scope=self.scope + "_hidden"))
+
+        with tf.variable_scope(self.scope + "_probs") as scope:
+            if self.special.get("reuse_probs", False):
+                scope.reuse_variables()
+            self.probs_update = optim.minimize(
+                self.loss,
+                var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
+                                           scope=self.scope + "_probs"))
+
+    def _probs(self, hidden_state, scope, reuse=False):
+        with tf.variable_scope(scope) as scope:
+            if reuse:
+                scope.reuse_variables()
+            probs = tflayers.fully_connected(
+                hidden_state,
+                num_outputs=self.n_actions,
+                activation_fn=tf.nn.softmax)
+            return probs
+
+    def predict(self, sess, state_batch, is_training=False):
+        return sess.run(
+            self.predicted_probs,
+            feed_dict={
+                self.states: state_batch,
+                self.is_training: is_training})
+
+    def update(self, sess, state_batch, action_batch, rewards_batch, is_training=True):
+        loss, _, _ = sess.run(
+            [self.loss, self.hidden_state_update, self.probs_update],
+            feed_dict={
+                self.states: state_batch,
+                self.actions: action_batch,
+                self.cumulative_rewards: rewards_batch,
+                self.is_training: is_training})
+        return loss
+
+
+class ValueAgent(object):
+    def __init__(self, state_shape, n_actions, network, special=None):
+        self.special = special or {}
+        self.state_shape = state_shape
+        self.n_actions = n_actions
+
+        self.states = tf.placeholder(shape=(None,) + state_shape, dtype=tf.float32)
         self.td_targets = tf.placeholder(shape=[None], dtype=tf.float32)
 
         self.is_training = tf.placeholder(dtype=tf.bool)
 
         self.scope = self.special.get("scope", "network")
 
-        self.predicted_qvalues = self.qnetwork(
-            network,
+        hidden_state = network(
             self.states,
-            scope=self.scope,
+            scope=self.scope + "_hidden",
+            reuse=self.special.get("reuse_hidden", False),
             is_training=self.is_training)
 
-        one_hot_actions = tf.one_hot(self.actions, n_actions)
-        predicted_qvalues_for_actions = tf.reduce_sum(
-            tf.multiply(self.predicted_qvalues, one_hot_actions),
-            axis=-1)
+        self.predicted_values = tf.squeeze(
+            self._state_value(
+                hidden_state,
+                scope=self.scope + "_state_value",
+                reuse=self.special.get("reuse_state_value", False)))
 
         self.loss = tf.losses.mean_squared_error(
             labels=self.td_targets,
-            predictions=predicted_qvalues_for_actions)
+            predictions=self.predicted_values)
 
-        self.update_step = tf.train.AdamOptimizer(self.special.get("lr", 1e-4)).minimize(
-            self.loss,
-            var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.scope))
+        optim = tf.train.AdamOptimizer(self.special.get("value_lr", 1e-4))
 
-    def qnetwork(self, network, state, scope, reuse=False, is_training=True):
-        hidden_state = network(state, scope=scope + "_hidden", reuse=reuse, is_training=is_training)
-        qvalues = self._qvalues(hidden_state, scope=scope + "_qvalues", reuse=reuse)
-
-        if self.special.get("dueling_network", False):
-            state_value = self._state_value(
-                hidden_state, scope=scope + "_state_values", reuse=reuse)
-            qvalues -= tf.reduce_mean(qvalues, axis=-1, keep_dims=True)
-            qvalues += state_value
-
-        return qvalues
-
-    def _qvalues(self, hidden_state, scope, reuse=False):
-        with tf.variable_scope(scope) as scope:
-            if reuse:
+        with tf.variable_scope(self.scope + "_hidden") as scope:
+            if self.special.get("reuse_hidden", False):
                 scope.reuse_variables()
-            qvalues = tflayers.fully_connected(
-                hidden_state,
-                num_outputs=self.n_actions,
-                activation_fn=None)
-            return qvalues
+            self.hidden_state_update = optim.minimize(
+                self.loss,
+                var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
+                                           scope=self.scope + "_hidden"))
+
+        with tf.variable_scope(self.scope + "_state_value") as scope:
+            if self.special.get("reuse_state_value", False):
+                scope.reuse_variables()
+            self.state_value_update = optim.minimize(
+                self.loss,
+                var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
+                                           scope=self.scope + "_state_value"))
 
     def _state_value(self, hidden_state, scope, reuse=False):
         with tf.variable_scope(scope) as scope:
@@ -138,84 +229,89 @@ class AACAgent(object):
 
     def predict(self, sess, state_batch, is_training=False):
         return sess.run(
-            self.predicted_qvalues,
+            self.predicted_values,
             feed_dict={
                 self.states: state_batch,
                 self.is_training: is_training})
 
-    def update(self, sess, state_batch, action_batch, td_target_batch, is_training=True):
-        q_loss, _ = sess.run(
-            [self.loss, self.update_step],
+    def update(self, sess, state_batch, td_target_batch, is_training=True):
+        loss, _, _ = sess.run(
+            [self.loss, self.hidden_state_update, self.state_value_update],
             feed_dict={
                 self.states: state_batch,
-                self.actions: action_batch,
                 self.td_targets: td_target_batch,
                 self.is_training: is_training})
-        return q_loss
-
-    def observe(self, state, action, reward, next_state, done):
-        self.buffer.append(
-            (state, action, reward, next_state, done))
+        return loss
 
 
-def e_greedy_actions(agent, sess, state, epsilon=0.0):
-    if np.random.rand() < epsilon:
-        actions = [np.random.choice(agent.n_actions) for _ in range(len(state))]
-    else:
-        qvalues = agent.predict(sess, state)
-        actions = qvalues.argmax(axis=1)
+class AACAgent(object):
+    def __init__(self, state_shape, n_actions, network, special=None):
+        self.special = special or {}
+        self.state_shape = state_shape
+        self.n_actions = n_actions
+
+        self.policy_net = PolicyAgent(state_shape, n_actions, network, special)
+        special["reuse_hidden"] = True
+        self.value_net = ValueAgent(state_shape, n_actions, network, special)
+
+
+def action(agent, sess, state):
+    probs = agent.policy_net.predict(sess, state)
+    actions = [np.random.choice(len(row), p=row) for row in probs]
     return actions
 
 
-def update(sess, q_net, target_net, discount_factor=0.99, batch_size=32):
-    q_loss = 0.0
+def update(sess, aac_agent, memory, discount_factor=0.99, batch_size=32):
+    policy_loss = 0.0
+    value_loss = 0.0
 
-    if len(q_net.buffer) >= batch_size:
-        batch_ids = np.random.choice(len(q_net.buffer), batch_size)
-        batch = np.array([q_net.buffer[i] for i in batch_ids])
+    if len(memory.buffer) >= batch_size:
+        batch_ids = np.random.choice(len(memory.buffer), batch_size)
+        batch = np.array([memory.buffer[i] for i in batch_ids])
 
-        state_batch = np.vstack(batch[:, 0]).reshape((-1,) + q_net.state_shape)
+        state_batch = np.vstack(batch[:, 0]).reshape((-1,) + aac_agent.state_shape)
         action_batch = np.vstack(batch[:, 1]).reshape(-1)
         reward_batch = np.vstack(batch[:, 2]).reshape(-1)
-        next_state_batch = np.vstack(batch[:, 3]).reshape((-1,) + q_net.state_shape)
+        next_state_batch = np.vstack(batch[:, 3]).reshape((-1,) + aac_agent.state_shape)
         done_batch = np.vstack(batch[:, 4]).reshape(-1)
 
-        qvalues = q_net.predict(sess, state_batch)
-        best_actions = qvalues.argmax(axis=1)
-        qvalues_next = target_net.predict(sess, next_state_batch)
-        td_target_batch = reward_batch + \
+        values = aac_agent.value_net.predict(sess, state_batch)
+        values_next = aac_agent.value_net.predict(sess, next_state_batch)
+        td_target = reward_batch + \
             np.invert(done_batch).astype(np.float32) * \
-            discount_factor * qvalues_next[np.arange(batch_size), best_actions]
+            discount_factor * values_next
+        td_error = td_target - values
 
-        q_loss = q_net.update(sess, state_batch, action_batch, td_target_batch)
+        value_loss = aac_agent.value_net.update(sess, state_batch, td_target)
 
-    return q_loss
+        policy_loss = aac_agent.policy_net.update(sess, state_batch, action_batch, td_error)
+
+    return policy_loss, value_loss
 
 
 def update_wraper(discount_factor=0.99, batch_size=32):
-    def wrapper(sess, q_net, target_net):
-        return update(sess, q_net, target_net, discount_factor, batch_size)
+    def wrapper(sess, q_net, memory):
+        return update(sess, q_net, memory, discount_factor, batch_size)
 
     return wrapper
 
 
 def generate_session(
-        sess, q_net, target_net, env, epsilon=0.5, t_max=1000, update_fn=None):
-    """play env with approximate q-learning agent and train it at the same time"""
-
+        sess, aac_agent, memory, env, t_max=1000, update_fn=None):
     total_reward = 0
+    total_policy_loss, total_state_loss = 0, 0
     s = env.reset()
-    total_loss = 0
 
     for t in range(t_max):
-        a = e_greedy_actions(q_net, sess, np.array([s], dtype=np.float32), epsilon)[0]
+        a = action(aac_agent, sess, np.array([s], dtype=np.float32))[0]
 
         new_s, r, done, _ = env.step(a)
 
         if update_fn is not None:
-            q_net.observe(s, a, r, new_s, done)
-            curr_loss = update_fn(sess, q_net, target_net)
-            total_loss += curr_loss
+            memory.observe(s, a, r, new_s, done)
+            curr_policy_loss, curr_state_loss = update_fn(sess, aac_agent, memory)
+            total_policy_loss += curr_policy_loss
+            total_state_loss += curr_state_loss
 
         total_reward += r
 
@@ -223,127 +319,90 @@ def generate_session(
         if done:
             break
 
-    return total_reward, total_loss / float(t + 1), t
+    return total_reward, total_policy_loss / float(t + 1), total_state_loss / float(t + 1),  t
 
 
-def epsilon_greedy_policy(agent, sess, observations, epsilon):
-    A = np.ones(shape=(len(observations), agent.n_actions), dtype=float) * epsilon / agent.n_actions
-    q_values = agent.predict(sess, observations)
-    best_actions = np.argmax(q_values, axis=1)
-    for i, action in enumerate(best_actions):
-        A[i, action] += (1.0 - epsilon)
-    actions = [np.random.choice(len(row), p=row) for row in A]
-    return actions
-
-
-def generate_sessions(sess, q_net, target_net, env_pool, epsilon=0.25, t_max=1000, update_fn=None):
+def generate_sessions(sess, aac_agent, memory, env_pool, t_max=1000, update_fn=None):
     total_reward = 0.0
-    total_loss = 0.0
+    total_policy_loss, total_value_loss = 0, 0
     total_games = 0.0
 
     states = env_pool.reset()
     for t in range(t_max):
-        actions = epsilon_greedy_policy(q_net, sess, states, epsilon)
+        actions = action(aac_agent, sess, states)
         new_states, rewards, dones, _ = env_pool.step(actions)
-        
+
         if update_fn is not None:
             for s, a, r, new_s, done in zip(states, actions, rewards, new_states, dones):
-                q_net.observe(s, a, r, new_s, done)
-            curr_loss = update_fn(sess, q_net, target_net)
-            total_loss += curr_loss
+                memory.observe(s, a, r, new_s, done)
+            curr_policy_loss, curr_state_loss = update_fn(sess, aac_agent, memory)
+            total_policy_loss += curr_policy_loss
+            total_value_loss += curr_state_loss
 
         states = new_states
 
         total_reward += rewards.mean()
         total_games += dones.sum()
 
-    return total_reward, total_loss, total_games
+    return total_reward, total_policy_loss, total_value_loss, total_games
 
 
-def q_learning(
-        sess, q_net, target_net, env, update_fn,
-        n_epochs=1000, n_epochs_skip=10, n_sessions=100, t_max=1000,
-        initial_epsilon=0.25, final_epsilon=0.01):
+def actor_critic_learning(
+        sess, q_net, memory, env, update_fn,
+        n_epochs=1000, n_sessions=100, t_max=1000):
     tr = trange(
         n_epochs,
-        desc="mean reward = {:.3f}\tepsilon = {:.3f}\tloss = {:.3f}\tsteps = {:.3f}".format(
-            0.0, 0.0, 0.0, 0.0),
+        desc="",
         leave=True)
-
-    epsilon = initial_epsilon
-    n_epochs_decay = n_epochs * 0.8
 
     history = {
         "reward": np.zeros(n_epochs),
-        "epsilon": np.zeros(n_epochs),
-        "loss": np.zeros(n_epochs),
+        "policy_loss": np.zeros(n_epochs),
+        "value_loss": np.zeros(n_epochs),
         "steps": np.zeros(n_epochs),
     }
 
-    copy_model_parameters(sess, q_net, target_net)
     for i in tr:
         sessions = [
-            generate_sessions(sess, q_net, target_net, env, epsilon, t_max, update_fn=update_fn)
+            generate_sessions(sess, q_net, memory, env, t_max, update_fn=update_fn)
             for _ in range(n_sessions)]
-        session_rewards, session_loss, session_steps = map(np.array, zip(*sessions))
-
-        if i < n_epochs_decay:
-            epsilon -= (initial_epsilon - final_epsilon) / float(n_epochs_decay)
-
-        if (i + 1) % n_epochs_skip == 0:
-            copy_model_parameters(sess, q_net, target_net)
+        session_rewards, session_policy_loss, session_value_loss, session_steps = \
+            map(np.array, zip(*sessions))
 
         history["reward"][i] = np.mean(session_rewards)
-        history["epsilon"][i] = epsilon
-        history["loss"][i] = np.mean(session_loss)
+        history["policy_loss"][i] = np.mean(session_policy_loss)
+        history["value_loss"][i] = np.mean(session_value_loss)
         history["steps"][i] = np.mean(session_steps)
 
         tr.set_description(
-            "mean reward = {:.3f}\tepsilon = {:.3f}\tloss = {:.3f}\tsteps = {:.3f}".format(
-                history["reward"][i], history["epsilon"][i], history["loss"][i],
-                history["steps"][i]))
+            "mean reward = {:.3f}\tpolicy loss = {:.3f}"
+            "\tvalue loss = {:.3f}\tsteps = {:.3f}".format(
+                history["reward"][i], history["policy_loss"][i],
+                history["value_loss"][i], history["steps"][i]))
 
-    copy_model_parameters(sess, q_net, target_net)
     return history
 
 
-def conv_network(states, scope, reuse=False, is_training=True, activation_fn=tf.nn.elu):
+def linear_network(states, scope=None, reuse=False, is_training=False, layers=None,
+                   activation_fn=tf.nn.elu):
+    layers = layers or [16, 16]
     with tf.variable_scope(scope or "network") as scope:
+
         if reuse:
             scope.reuse_variables()
 
-        conv = tflayers.conv2d(
+        hidden_state = tflayers.stack(
             states,
-            num_outputs=32,
-            kernel_size=8,
-            stride=4,
-            activation_fn=activation_fn)
-        conv = tflayers.conv2d(
-            conv,
-            num_outputs=64,
-            kernel_size=4,
-            stride=2,
-            activation_fn=activation_fn)
-        conv = tflayers.conv2d(
-            conv,
-            num_outputs=64,
-            kernel_size=3,
-            stride=1,
+            tflayers.fully_connected,
+            layers,
             activation_fn=activation_fn)
 
-        flat = tflayers.flatten(conv)
-        logits = tflayers.fully_connected(
-            flat,
-            512,
-            # normalizer_fn=tflayers.batch_norm,
-            # normalizer_params={"is_training": is_training},
-            activation_fn=activation_fn)
-        return logits
+        return hidden_state
 
 
-def network_wrapper(activation_fn=tf.nn.elu):
-    def wrapper(states, scope=None, reuse=False, is_training=True):
-        return conv_network(states, scope, reuse, is_training, activation_fn=activation_fn)
+def network_wrapper(layers=None, activation_fn=tf.nn.elu):
+    def wrapper(states, scope=None, reuse=False, is_training=False):
+        return linear_network(states, scope, reuse, is_training, layers, activation_fn)
 
     return wrapper
 
@@ -352,7 +411,7 @@ def _parse_args():
     parser = argparse.ArgumentParser(description='Policy iteration example')
     parser.add_argument('--env',
                         type=str,
-                        default='KungFuMaster-v0',  # BreakoutDeterministic-v0
+                        default='CartPole-v0',  # CartPole-v0, MountainCar-v0
                         help='The environment to use')
     parser.add_argument('--n_epochs',
                         type=int,
@@ -382,91 +441,57 @@ def _parse_args():
     parser.add_argument('--buffer_len',
                         type=int,
                         default=10000)
-    parser.add_argument('--initial_epsilon',
-                        type=float,
-                        default=1.0,
-                        help='Gamma discount factor')
-    parser.add_argument('--final_epsilon',
-                        type=float,
-                        default=0.01)
     parser.add_argument('--load',
                         action='store_true',
                         default=False)
     parser.add_argument('--gpu_option',
                         type=float,
                         default=0.45)
-    parser.add_argument('--initial_lr',
+    parser.add_argument('--policy_lr',
                         type=float,
-                        default=1e-4)
-    parser.add_argument('--n_epochs_skip',
-                        type=int,
-                        default=2)
+                        default=1e-2)
+    parser.add_argument('--value_lr',
+                        type=float,
+                        default=1e-2)
     parser.add_argument('--n_games',
                         type=int,
                         default=64)
-    parser.add_argument('--dueling_network',
-                        action='store_true',
-                        default=False)
 
     args, _ = parser.parse_known_args()
     return args
 
 
-def run(env, q_learning_args, update_args, n_games,
-        initial_lr=1e-4, dueling_network=False,
-        network=None, buffer_len=100000,
+def run(env, q_learning_args, update_args, agent_agrs,
+        n_games,
         plot_stats=False, api_key=None,
         load=False, gpu_option=0.4):
     env_name = env
-    height, width = 84, 84
-    n_frames = 4
-    make_env = lambda: EnvPool(
-        FrameBuffer(
-            PreprocessImage(
-                gym.make(env_name),
-                width=width, height=height, grayscale=True,
-                crop=lambda img: img[20:-10, 8:-8]),
-            n_frames=n_frames,
-            reshape_fn=lambda x: np.transpose(x, [1, 2, 3, 0]).reshape(height, width, n_frames)),
-        n_envs=n_games)
-
-    env = make_env()
+    env = EnvPool(gym.make(env_name).env, n_games)
 
     n_actions = env.action_space.n
     state_shape = env.observation_space.shape
 
-    network = network or conv_network
+    network = agent_agrs["network"] or linear_network
+
+    memory = ObservationsBuffer(agent_agrs["buffer_len"])
 
     q_net = AACAgent(
         state_shape, n_actions, network,
-        special={
-            "buffer_len": buffer_len,
-            "lr": initial_lr,
-            "scope": "q_net",
-            "dueling_network": dueling_network})
-
-    target_net = AACAgent(
-        state_shape, n_actions, network,
-        special={
-            "buffer_len": 0,
-            "lr": initial_lr,
-            "scope": "frozen_q_net",
-            "dueling_network": dueling_network})
+        special=agent_agrs)
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
 
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         saver = tf.train.Saver()
         model_dir = "./logs_" + env_name.replace(string.punctuation, "_")
-        if dueling_network:
-            model_dir += "_dueling_network"
+
         if not load:
             sess.run(tf.global_variables_initializer())
         else:
             saver.restore(sess, "{}/model.ckpt".format(model_dir))
 
-        stats = q_learning(
-            sess, q_net, target_net, env,
+        stats = actor_critic_learning(
+            sess, q_net, memory, env,
             update_fn=update_wraper(**update_args),
             **q_learning_args)
         create_if_need(model_dir)
@@ -478,10 +503,9 @@ def run(env, q_learning_args, update_args, n_games,
             save_stats(stats, save_dir=stats_dir)
 
         if api_key is not None:
-            env = env.env
+            env = gym.make(env_name)
             env = gym.wrappers.Monitor(env, "{}/monitor".format(model_dir), force=True)
-            sessions = [generate_session(sess, q_net, target_net, env, 0.01, int(1e10),
-                                         update_fn=None)
+            sessions = [generate_session(sess, q_net, memory, env, int(1e10), update_fn=None)
                         for _ in range(300)]
             env.close()
             gym.upload("{}/monitor".format(model_dir), api_key=api_key)
@@ -489,22 +513,28 @@ def run(env, q_learning_args, update_args, n_games,
 
 def main():
     args = _parse_args()
-    network = network_wrapper(activations[args.activation])
+    try:
+        layers = tuple(map(int, args.layers.split("-")))
+    except:
+        layers = None
+    network = network_wrapper(layers, activations[args.activation])
     q_learning_args = {
         "n_epochs": args.n_epochs,
-        "n_epochs_skip": args.n_epochs_skip,
         "n_sessions": args.n_sessions,
         "t_max": args.t_max,
-        "initial_epsilon": args.initial_epsilon,
-        "final_epsilon": args.final_epsilon
     }
     update_args = {
         "discount_factor": args.gamma,
-        "batch_size": args.batch_size,
+        "batch_size": args.batch_size
     }
-    run(args.env, q_learning_args, update_args, args.n_games,
-        args.initial_lr, args.dueling_network,
-        network, args.buffer_len,
+    agent_args = {
+        "network": network,
+        "policy_lr": args.policy_lr,
+        "value_lr": args.value_lr,
+        "buffer_len": args.buffer_len
+    }
+    run(args.env, q_learning_args, update_args, agent_args,
+        args.n_games,
         args.plot_stats, args.api_key,
         args.load, args.gpu_option)
 
