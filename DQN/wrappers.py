@@ -55,46 +55,40 @@ class FrameBuffer(Wrapper):
 
 
 class EnvPool(Wrapper):
-    def __init__(self, env, n_envs=16, min_n_envs=None):
+    """
+        Typical EnvPool, that does not care about done envs!
+        @TODO: rewrite
+    """
+    def __init__(self, env, n_envs=16):
         super(EnvPool, self).__init__(env)
         self.initial_env = env
         self.n_envs = n_envs
-        self.min_n_envs = (min_n_envs or 1)
         self.env_shape = env.observation_space.shape
         self.envs = []
-        self.dones_env = []
         self.recreate_envs()
 
-    def recreate_envs(self, done_mask=None):
+    def recreate_envs(self):
         self.close()
-        if done_mask is None:
-            self.envs = np.array([copy(self.initial_env) for _ in range(self.n_envs)])
-        else:
-            self.envs = np.array(
-                [copy(self.initial_env) if done_mask[i] else self.envs[i]
-                for i in range(self.n_envs)])
+        self.envs = np.array([copy(self.initial_env) for _ in range(self.n_envs)])
 
     def reset(self):
         result = np.zeros(shape=[self.n_envs, ] + list(self.env_shape), dtype=np.float32)
         for i, env in enumerate(self.envs):
             result[i] = env.reset()
-        self.dones_env = np.array([False] * self.n_envs)
         return result
 
     def step(self, actions):
-        curr_n_env = np.sum(np.invert(self.dones_env))
-        if len(actions) == curr_n_env:
-            new_states = np.zeros(shape=(curr_n_env, ) + tuple(self.env_shape), dtype=np.float32)
-            rewards = np.zeros(shape=curr_n_env, dtype=np.float32)
-            dones = np.ones(shape=curr_n_env, dtype=np.bool)
-            for i, env in enumerate(self.envs[np.invert(self.dones_env)]):
-                new_s, r, done, _ = env.step(actions[i])
+        new_states = np.zeros(shape=(self.n_envs, ) + tuple(self.env_shape), dtype=np.float32)
+        rewards = np.zeros(shape=self.n_envs, dtype=np.float32)
+        dones = np.ones(shape=self.n_envs, dtype=np.bool)
+        for i, (action, env) in enumerate(zip(actions, self.envs)):
+            new_s, r, done, _ = env.step(action)
+            rewards[i] = r
+            dones[i] = done
+            if not done:
                 new_states[i] = new_s
-                rewards[i] = r
-                dones[i] = done
-            self.dones_env[np.invert(self.dones_env)] = dones
-        else:
-            raise NotImplemented()
+            else:
+                new_states[i] = env.reset()
         return new_states, rewards, dones, None
 
     def close(self):

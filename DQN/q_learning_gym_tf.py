@@ -227,7 +227,7 @@ def linear_network(states, scope=None, reuse=False, layers=None, activation_fn=t
         return hidden_state
 
 
-def linear_network_wrapper(layers=None, activation_fn=tf.tanh):
+def network_wrapper(layers=None, activation_fn=tf.tanh):
     def wrapper(states, scope=None, reuse=False):
         return linear_network(states, scope, reuse, layers, activation_fn)
 
@@ -334,7 +334,7 @@ def main():
         layers = tuple(map(int, args.layers.split("-")))
     except:
         layers = None
-    network = linear_network_wrapper(layers, activations[args.activation])
+    network = network_wrapper(layers, activations[args.activation])
     run(args.env, args.n_epochs, args.gamma,
         args.plot_stats, args.api_key,
         network, args.batch_size, args.buffer_len, args.initial_epsilon,

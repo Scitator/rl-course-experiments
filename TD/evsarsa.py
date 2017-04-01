@@ -70,7 +70,7 @@ class EVSarsaAgent():
 
         value = np.array([self.getQValue(state, a) for a in possibleActions])
         value = (value * epsilon).sum() + value.max() * (
-        1.0 - epsilon / float(len(possibleActions)))
+            1.0 - epsilon / float(len(possibleActions)))
         return value
 
     def getPolicy(self, state):

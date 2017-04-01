@@ -184,8 +184,8 @@ def update(sess, q_net, target_net, discount_factor=0.99, batch_size=32):
         best_actions = qvalues.argmax(axis=1)
         qvalues_next = target_net.predict(sess, next_state_batch)
         td_target_batch = reward_batch + \
-                          np.invert(done_batch).astype(np.float32) * \
-                          discount_factor * qvalues_next[np.arange(batch_size), best_actions]
+            np.invert(done_batch).astype(np.float32) * \
+            discount_factor * qvalues_next[np.arange(batch_size), best_actions]
 
         q_loss = q_net.update(sess, state_batch, action_batch, td_target_batch)
 
@@ -199,7 +199,8 @@ def update_wraper(discount_factor=0.99, batch_size=32):
     return wrapper
 
 
-def generate_session(sess, q_net, target_net, env, epsilon=0.5, t_max=1000, update_fn=None):
+def generate_session(
+        sess, q_net, target_net, env, epsilon=0.5, t_max=1000, update_fn=None):
     """play env with approximate q-learning agent and train it at the same time"""
 
     total_reward = 0
@@ -236,8 +237,9 @@ def epsilon_greedy_policy(agent, sess, observations, epsilon):
 
 
 def generate_sessions(sess, q_net, target_net, env_pool, epsilon=0.25, t_max=1000, update_fn=None):
-    total_reward = 0
-    total_loss = 0
+    total_reward = 0.0
+    total_loss = 0.0
+    total_games = 0.0
 
     states = env_pool.reset()
     for t in range(t_max):
@@ -250,21 +252,18 @@ def generate_sessions(sess, q_net, target_net, env_pool, epsilon=0.25, t_max=100
             curr_loss = update_fn(sess, q_net, target_net)
             total_loss += curr_loss
 
-        states = new_states[np.invert(dones)]
+        states = new_states
 
-        total_reward += rewards.sum()
-        
-        if len(states) < env_pool.min_n_envs:
-            break
+        total_reward += rewards.mean()
+        total_games += dones.sum()
 
-    
-    return total_reward, total_loss / float(t + 1), t
+    return total_reward, total_loss, total_games
 
 
 def q_learning(
         sess, q_net, target_net, env, update_fn,
         n_epochs=1000, n_epochs_skip=10, n_sessions=100, t_max=1000,
-        initial_epsilon=0.25, final_epsilon=0.01, n_updates=10):
+        initial_epsilon=0.25, final_epsilon=0.01):
     tr = trange(
         n_epochs,
         desc="mean reward = {:.3f}\tepsilon = {:.3f}\tloss = {:.3f}\tsteps = {:.3f}".format(
@@ -285,7 +284,7 @@ def q_learning(
     for i in tr:
         sessions = [
             generate_sessions(sess, q_net, target_net, env, epsilon, t_max, update_fn=update_fn)
-            for _ in range(n_updates)]
+            for _ in range(n_sessions)]
         session_rewards, session_loss, session_steps = map(np.array, zip(*sessions))
 
         if i < n_epochs_decay:
@@ -402,9 +401,9 @@ def _parse_args():
     parser.add_argument('--n_epochs_skip',
                         type=int,
                         default=2)
-    parser.add_argument('--n_updates',
+    parser.add_argument('--n_games',
                         type=int,
-                        default=100)
+                        default=64)
     parser.add_argument('--dueling_network',
                         action='store_true',
                         default=False)
@@ -413,7 +412,7 @@ def _parse_args():
     return args
 
 
-def run(env, q_learning_args, update_args,
+def run(env, q_learning_args, update_args, n_games,
         initial_lr=1e-4, dueling_network=False,
         network=None, buffer_len=100000,
         plot_stats=False, api_key=None,
@@ -429,7 +428,7 @@ def run(env, q_learning_args, update_args,
                 crop=lambda img: img[20:-10, 8:-8]),
             n_frames=n_frames,
             reshape_fn=lambda x: np.transpose(x, [1, 2, 3, 0]).reshape(height, width, n_frames)),
-        n_envs=q_learning_args["n_sessions"])
+        n_envs=n_games)
 
     env = make_env()
 
@@ -497,14 +496,13 @@ def main():
         "n_sessions": args.n_sessions,
         "t_max": args.t_max,
         "initial_epsilon": args.initial_epsilon,
-        "final_epsilon": args.final_epsilon,
-        "n_updates": args.n_updates
+        "final_epsilon": args.final_epsilon
     }
     update_args = {
         "discount_factor": args.gamma,
         "batch_size": args.batch_size,
     }
-    run(args.env, q_learning_args, update_args,
+    run(args.env, q_learning_args, update_args, args.n_games,
         args.initial_lr, args.dueling_network,
         network, args.buffer_len,
         args.plot_stats, args.api_key,
