@@ -16,7 +16,6 @@ from matplotlib import pyplot as plt
 plt.style.use("ggplot")
 
 
-
 def create_if_need(path):
     if not os.path.exists(path):
         os.makedirs(path)
@@ -299,7 +298,7 @@ def run(env, learning_args, update_args, agent_agrs,
         plot_stats=False, api_key=None,
         load=False, gpu_option=0.4):
     env_name = env
-    env = gym.make(env).env
+    env = gym.make(env_name).env
 
     n_actions = env.action_space.n
     state_shape = env.observation_space.shape
@@ -332,6 +331,7 @@ def run(env, learning_args, update_args, agent_agrs,
             save_stats(stats, save_dir=stats_dir)
 
         if api_key is not None:
+            env = gym.make(env_name)
             env = gym.wrappers.Monitor(env, "{}/monitor".format(model_dir), force=True)
             sessions = [generate_session(sess, q_net, env, int(1e10),
                                          update_fn=None)
