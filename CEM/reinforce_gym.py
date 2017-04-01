@@ -332,7 +332,6 @@ def run(env, learning_args, update_args, agent_agrs,
             save_stats(stats, save_dir=stats_dir)
 
         if api_key is not None:
-            env = env.env
             env = gym.wrappers.Monitor(env, "{}/monitor".format(model_dir), force=True)
             sessions = [generate_session(sess, q_net, env, int(1e10),
                                          update_fn=None)
