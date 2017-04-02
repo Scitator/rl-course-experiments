@@ -18,28 +18,6 @@ plt.style.use("ggplot")
 from wrappers import EnvPool
 
 
-def copy_model_parameters(sess, net1, net2):
-    """
-    Copies the model parameters of one net to another.
-
-    Args:
-      sess: Tensorflow session instance
-      net1: net to copy the parameters from
-      net2: net to copy the parameters to
-    """
-    net1_params = [t for t in tf.trainable_variables() if t.name.startswith(net1.scope)]
-    net1_params = sorted(net1_params, key=lambda v: v.name)
-    net2_params = [t for t in tf.trainable_variables() if t.name.startswith(net2.scope)]
-    net2_params = sorted(net2_params, key=lambda v: v.name)
-
-    update_ops = []
-    for net1_v, net2_v in zip(net1_params, net2_params):
-        op = net2_v.assign(net1_v)
-        update_ops.append(op)
-
-    sess.run(update_ops)
-
-
 def create_if_need(path):
     if not os.path.exists(path):
         os.makedirs(path)
@@ -84,6 +62,16 @@ class ObservationsBuffer(object):
         return batch
 
 
+def update_varlist(loss, optimizer, var_list, scope, reuse=False, grad_clip=5.0, global_step=None):
+    with tf.variable_scope(scope) as scope:
+        if reuse:
+            scope.reuse_variables()
+        gvs = optimizer.compute_gradients(loss, var_list=var_list)
+        capped_gvs = [(tf.clip_by_value(grad, -grad_clip, grad_clip), var) for grad, var in gvs]
+        update_step = optimizer.apply_gradients(capped_gvs, global_step=global_step)
+        return update_step
+
+
 class PolicyAgent(object):
     def __init__(self, state_shape, n_actions, network, special=None):
         self.special = special or {}
@@ -124,23 +112,20 @@ class PolicyAgent(object):
                     axis=-1))
             self.loss += H * 0.001
 
-        optim = tf.train.AdamOptimizer(self.special.get("policy_lr", 1e-4))
+        optimizer = tf.train.AdamOptimizer(self.special.get("policy_lr", 1e-4))
+        self.hidden_state_update = update_varlist(
+            self.loss, optimizer,
+            var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
+                                       scope=self.scope + "_hidden"),
+            scope=self.scope + "_hidden",
+            reuse=self.special.get("reuse_hidden", False))
 
-        with tf.variable_scope(self.scope + "_hidden") as scope:
-            if self.special.get("reuse_hidden", False):
-                scope.reuse_variables()
-            self.hidden_state_update = optim.minimize(
-                self.loss,
-                var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
-                                           scope=self.scope + "_hidden"))
-
-        with tf.variable_scope(self.scope + "_probs") as scope:
-            if self.special.get("reuse_probs", False):
-                scope.reuse_variables()
-            self.probs_update = optim.minimize(
-                self.loss,
-                var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
-                                           scope=self.scope + "_probs"))
+        self.probs_update = update_varlist(
+            self.loss, optimizer,
+            var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
+                                       scope=self.scope + "_probs"),
+            scope=self.scope + "_probs",
+            reuse=self.special.get("reuse_probs", False))
 
     def _probs(self, hidden_state, scope, reuse=False):
         with tf.variable_scope(scope) as scope:
@@ -199,23 +184,20 @@ class ValueAgent(object):
             labels=self.td_targets,
             predictions=self.predicted_values)
 
-        optim = tf.train.AdamOptimizer(self.special.get("value_lr", 1e-4))
+        optimizer = tf.train.AdamOptimizer(self.special.get("value_lr", 1e-4))
+        self.hidden_state_update = update_varlist(
+            self.loss, optimizer,
+            var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
+                                       scope=self.scope + "_hidden"),
+            scope=self.scope + "_hidden",
+            reuse=self.special.get("reuse_hidden", False))
 
-        with tf.variable_scope(self.scope + "_hidden") as scope:
-            if self.special.get("reuse_hidden", False):
-                scope.reuse_variables()
-            self.hidden_state_update = optim.minimize(
-                self.loss,
-                var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
-                                           scope=self.scope + "_hidden"))
-
-        with tf.variable_scope(self.scope + "_state_value") as scope:
-            if self.special.get("reuse_state_value", False):
-                scope.reuse_variables()
-            self.state_value_update = optim.minimize(
-                self.loss,
-                var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
-                                           scope=self.scope + "_state_value"))
+        self.state_value_update = update_varlist(
+            self.loss, optimizer,
+            var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
+                                       scope=self.scope + "_state_value"),
+            scope=self.scope + "_state_value",
+            reuse=self.special.get("reuse_state_value", False))
 
     def _state_value(self, hidden_state, scope, reuse=False):
         with tf.variable_scope(scope) as scope:
@@ -449,10 +431,10 @@ def _parse_args():
                         default=0.45)
     parser.add_argument('--policy_lr',
                         type=float,
-                        default=1e-2)
+                        default=1e-3)
     parser.add_argument('--value_lr',
                         type=float,
-                        default=1e-2)
+                        default=1e-3)
     parser.add_argument('--n_games',
                         type=int,
                         default=10)
