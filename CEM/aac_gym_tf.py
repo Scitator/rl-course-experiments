@@ -327,7 +327,7 @@ def generate_sessions(sess, aac_agent, memory, env_pool, t_max=1000, update_fn=N
     total_policy_loss, total_value_loss = 0, 0
     total_games = 0.0
 
-    states = env_pool.reset()
+    states = env_pool.pool_states()
     for t in range(t_max):
         actions = action(aac_agent, sess, states)
         new_states, rewards, dones, _ = env_pool.step(actions)
@@ -418,10 +418,10 @@ def _parse_args():
                         default=100)
     parser.add_argument('--n_sessions',
                         type=int,
-                        default=128)
+                        default=10)
     parser.add_argument('--t_max',
                         type=int,
-                        default=1000)
+                        default=500)
     parser.add_argument('--gamma',
                         type=float,
                         default=0.99,
@@ -440,7 +440,7 @@ def _parse_args():
                         default=64)
     parser.add_argument('--buffer_len',
                         type=int,
-                        default=10000)
+                        default=1000)
     parser.add_argument('--load',
                         action='store_true',
                         default=False)
@@ -455,7 +455,7 @@ def _parse_args():
                         default=1e-2)
     parser.add_argument('--n_games',
                         type=int,
-                        default=64)
+                        default=10)
 
     args, _ = parser.parse_known_args()
     return args
