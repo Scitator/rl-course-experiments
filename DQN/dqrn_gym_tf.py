@@ -517,6 +517,7 @@ def _parse_args():
         '--gpu_option',
         type=float,
         default=0.45)
+
     parser.add_argument(
         '--initial_lr',
         type=float,
@@ -529,6 +530,11 @@ def _parse_args():
         '--lr_decay',
         type=float,
         default=0.999)
+    parser.add_argument(
+        '--grad_clip',
+        type=float,
+        default=10.0)
+
     parser.add_argument(
         '--n_games',
         type=int,
@@ -621,7 +627,8 @@ def main():
     optimization_params = {
         "initial_lr": args.initial_lr,
         "decay_steps": args.lr_decay_steps,
-        "lr_decay": args.lr_decay
+        "lr_decay": args.lr_decay,
+        "grad_clip": args.grad_clip
     }
     agent_args = {
         "n_games": args.n_games,
