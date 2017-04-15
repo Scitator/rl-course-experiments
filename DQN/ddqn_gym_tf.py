@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 
 import gym
-from gym.wrappers import SkipWrapper
 import os
 import string
 import argparse
@@ -352,7 +351,7 @@ def _parse_args():
     parser = argparse.ArgumentParser(description='Policy iteration example')
     parser.add_argument('--env',
                         type=str,
-                        default='KungFuMaster-v0',  # BreakoutDeterministic-v0
+                        default='KungFuMasterDeterministic-v0',  # BreakoutDeterministic-v0
                         help='The environment to use')
     parser.add_argument('--n_epochs',
                         type=int,
