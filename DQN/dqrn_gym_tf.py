@@ -251,9 +251,16 @@ class DQRNAgent(object):
 
         self.is_end = tf.placeholder(shape=[None], dtype=tf.bool, name="is_end")
 
-        feature_net = FeatureNet(state_shape, network, special.get("feature_net", None))
+        self.special = special
+        self.scope = special.get("scope", "dqrn")
 
-        n_games = special["n_games"]
+        with tf.variable_scope(self.scope):
+            self._build_graph(network, cell)
+
+    def _build_graph(self, network, cell):
+        feature_net = FeatureNet(self.state_shape, network, self.special.get("feature_net", None))
+
+        n_games = self.special["n_games"]
         self.belief_state = tf.Variable(
             initial_value=tf.zeros([n_games, cell.state_size], dtype=tf.float32),
             expected_shape=[n_games, cell.state_size],
@@ -272,15 +279,15 @@ class DQRNAgent(object):
                 tf.zeros_like(rnn_states),
                 rnn_states))
 
-        qvalue_net = QvalueNet(n_actions, self.logits, special.get("qvalue_net", None))
+        qvalue_net = QvalueNet(self.n_actions, self.logits, self.special.get("qvalue_net", None))
         self.qvalue_net = build_optimization(
             qvalue_net,
-            special.get("qvalue_net_optimization", None))
+            self.special.get("qvalue_net_optimization", None))
 
         feature_net.add_loss(self.qvalue_net.loss)
         feature_net.compute_loss()
         self.feature_net = build_optimization(
-            feature_net, special.get("feature_net_optimization", None))
+            feature_net, self.special.get("feature_net_optimization", None))
 
     def predict(self, sess, state_batch):
         return sess.run(
@@ -569,7 +576,10 @@ def run(env, q_learning_args, update_args, agent_args,
         state_shape, n_actions, network, cell=rnn.GRUCell(512),
         special=agent_args)
     # @TODO: very very hintly, need to find best solution
-    vars_of_interest = [v for v in tf.global_variables() if v.name != "belief_state"]
+    vars_of_interest = [
+        v for v in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, q_net.scope)
+        if v.name != "{}/belief_state".format(q_net.scope)]
+
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
 
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
@@ -590,17 +600,22 @@ def run(env, q_learning_args, update_args, agent_args,
             sess, "{}/model.ckpt".format(model_dir),
             global_step=q_net.feature_net.global_step)
 
-        if plot_stats:
-            stats_dir = os.path.join(model_dir, "stats")
-            create_if_need(stats_dir)
-            save_stats(stats, save_dir=stats_dir)
+    if plot_stats:
+        stats_dir = os.path.join(model_dir, "stats")
+        create_if_need(stats_dir)
+        save_stats(stats, save_dir=stats_dir)
 
-        if api_key is not None:
-            tf.reset_default_graph()
-            agent_args["n_games"] = 1
-            q_net = DQRNAgent(
-                state_shape, n_actions, network, cell=rnn.GRUCell(512),
-                special=agent_args)
+    if api_key is not None:
+        tf.reset_default_graph()
+
+        agent_args["n_games"] = 1
+        q_net = DQRNAgent(
+            state_shape, n_actions, network, cell=rnn.GRUCell(512),
+            special=agent_args)
+
+        with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+            saver = tf.train.Saver(var_list=vars_of_interest)
+            saver.restore(sess, "{}/model.ckpt".format(model_dir))
 
             env_name = env_name.replace("Deterministic", "")
             env = gym.make(env_name)
