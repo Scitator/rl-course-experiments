@@ -110,7 +110,7 @@ class PolicyAgent(object):
                 tf.reduce_sum(
                     self.predicted_probs * tf.log(self.predicted_probs),
                     axis=-1))
-            self.loss += H * 0.001
+            self.loss += H * 0.01
 
         optimizer = tf.train.AdamOptimizer(self.special.get("policy_lr", 1e-4))
         self.hidden_state_update = update_varlist(
