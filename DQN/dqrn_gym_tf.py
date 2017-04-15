@@ -109,7 +109,11 @@ class FeatureNet(object):
         self.optimizer = None
         self.train_op = None
 
-        self.scope = self.special.get("scope", "feature_network")
+        try:
+            pre_scope = tf.get_variable_scope().name
+            self.scope = "{}/{}".format(pre_scope, self.special.get("scope", "feature_network"))
+        except:
+            self.scope = self.special.get("scope", "feature_network")
 
         self.hidden_state = network(
             self.states,
@@ -139,7 +143,11 @@ class PolicyNet(object):
         self.optimizer = None
         self.train_op = None
 
-        self.scope = self.special.get("scope", "policy_network")
+        try:
+            pre_scope = tf.get_variable_scope().name
+            self.scope = "{}/{}".format(pre_scope, self.special.get("scope", "policy_network"))
+        except:
+            self.scope = self.special.get("scope", "policy_network")
 
         self.predicted_probs = self._probs(
             hidden_state,
@@ -182,7 +190,11 @@ class StateValueNet(object):
         self.optimizer = None
         self.train_op = None
 
-        self.scope = self.special.get("scope", "state_network")
+        try:
+            pre_scope = tf.get_variable_scope().name
+            self.scope = "{}/{}".format(pre_scope, self.special.get("scope", "state_network"))
+        except:
+            self.scope = self.special.get("scope", "state_network")
 
         self.predicted_values = tf.squeeze(
             self._state_value(
@@ -216,7 +228,11 @@ class QvalueNet(object):
         self.optimizer = None
         self.train_op = None
 
-        self.scope = self.special.get("scope", "qvalue_network")
+        try:
+            pre_scope = tf.get_variable_scope().name
+            self.scope = "{}/{}".format(pre_scope, self.special.get("scope", "qvalue_network"))
+        except:
+            self.scope = self.special.get("scope", "qvalue_network")
 
         self.predicted_qvalues = self._qvalues(
             hidden_state,
