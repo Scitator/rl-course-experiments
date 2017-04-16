@@ -606,7 +606,7 @@ def run(env, q_learning_args, update_args, agent_args,
     state_shape = env.observation_space.shape
 
     network = agent_args.get("network", None) or conv_network
-    cell = rnn.LSTMCell(512, activation=None if linear_lstm else tf.tanh)
+    cell = rnn.LSTMCell(512, activation=lambda x: x if linear_lstm else tf.tanh)
     q_net = DQRNAgent(
         state_shape, n_actions, network, cell=cell,
         special=agent_args)
