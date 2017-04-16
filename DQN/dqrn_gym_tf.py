@@ -653,10 +653,10 @@ def run(env, q_learning_args, update_args, agent_args,
         saver = tf.train.Saver(var_list=vars_of_interest)
 
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-            # sess.run(tf.variables_initializer(
-            #     [v for v in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
-            #      if v.name.startswith("belief_state")]))
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.variables_initializer(
+                [v for v in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+                 if v.name.startswith("belief_state")]))
+            # sess.run(tf.global_variables_initializer())
             saver.restore(sess, "{}/model.ckpt".format(model_dir))
 
             env_name = env_name.replace("Deterministic", "")
