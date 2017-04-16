@@ -61,12 +61,11 @@ activations = {
 }
 
 
-def update_varlist(loss, optimizer, var_list, scope, reuse=False, grad_clip=5.0, global_step=None):
-    with tf.variable_scope(scope, reuse=reuse):
-        gvs = optimizer.compute_gradients(loss, var_list=var_list)
-        capped_gvs = [(tf.clip_by_value(grad, -grad_clip, grad_clip), var) for grad, var in gvs]
-        update_step = optimizer.apply_gradients(capped_gvs, global_step=global_step)
-        return update_step
+def update_varlist(loss, optimizer, var_list, grad_clip=5.0, global_step=None):
+    gvs = optimizer.compute_gradients(loss, var_list=var_list)
+    capped_gvs = [(tf.clip_by_value(grad, -grad_clip, grad_clip), var) for grad, var in gvs]
+    update_step = optimizer.apply_gradients(capped_gvs, global_step=global_step)
+    return update_step
 
 
 def build_optimization(model, optimization_params=None):
@@ -89,8 +88,6 @@ def build_optimization(model, optimization_params=None):
         model.loss, model.optimizer,
         var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
                                    scope=model.scope),
-        scope=model.scope,
-        reuse=False,
         grad_clip=optimization_params.get("grad_clip", 10.0),
         global_step=model.global_step)
 
@@ -109,15 +106,11 @@ class FeatureNet(object):
         self.optimizer = None
         self.train_op = None
 
-        try:
-            pre_scope = tf.get_variable_scope().name
-            self.scope = "{}/{}".format(pre_scope, self.special.get("scope", "feature_network"))
-        except:
-            self.scope = self.special.get("scope", "feature_network")
+        self.scope = self.special.get("scope", "feature_network")
 
         self.hidden_state = network(
             self.states,
-            scope=self.scope + "_hidden",
+            scope=self.scope + "/hidden",
             reuse=self.special.get("reuse_hidden", False),
             is_training=self.is_training)
 
@@ -143,15 +136,11 @@ class PolicyNet(object):
         self.optimizer = None
         self.train_op = None
 
-        try:
-            pre_scope = tf.get_variable_scope().name
-            self.scope = "{}/{}".format(pre_scope, self.special.get("scope", "policy_network"))
-        except:
-            self.scope = self.special.get("scope", "policy_network")
+        self.scope = self.special.get("scope", "policy_network")
 
         self.predicted_probs = self._probs(
             hidden_state,
-            scope=self.scope + "_probs",
+            scope=self.scope + "/probs",
             reuse=self.special.get("reuse_probs", False))
 
         one_hot_actions = tf.one_hot(self.actions, n_actions)
@@ -190,16 +179,12 @@ class StateValueNet(object):
         self.optimizer = None
         self.train_op = None
 
-        try:
-            pre_scope = tf.get_variable_scope().name
-            self.scope = "{}/{}".format(pre_scope, self.special.get("scope", "state_network"))
-        except:
-            self.scope = self.special.get("scope", "state_network")
+        self.scope = self.special.get("scope", "state_network")
 
         self.predicted_values = tf.squeeze(
             self._state_value(
                 hidden_state,
-                scope=self.scope + "_state_value",
+                scope=self.scope + "/state_value",
                 reuse=self.special.get("reuse_state_value", False)))
 
         self.loss = tf.losses.mean_squared_error(
@@ -228,15 +213,11 @@ class QvalueNet(object):
         self.optimizer = None
         self.train_op = None
 
-        try:
-            pre_scope = tf.get_variable_scope().name
-            self.scope = "{}/{}".format(pre_scope, self.special.get("scope", "qvalue_network"))
-        except:
-            self.scope = self.special.get("scope", "qvalue_network")
+        self.scope = self.special.get("scope", "qvalue_network")
 
         self.predicted_qvalues = self._qvalues(
             hidden_state,
-            scope=self.scope + "_state_value",
+            scope=self.scope + "/qvalue",
             reuse=self.special.get("reuse_state_value", False))
 
         one_hot_actions = tf.one_hot(self.actions, n_actions)
@@ -259,6 +240,46 @@ class QvalueNet(object):
             return qvalues
 
 
+def get_state_variables(batch_size, cell):
+    # For each layer, get the initial state and make a variable out of it
+    # to enable updating its value.
+    state_variables = []
+    zero_states = cell.zero_state(batch_size, tf.float32)
+    if isinstance(zero_states, list):
+        for state_c, state_h in zero_states:
+            state_variables.append(
+                rnn.LSTMStateTuple(
+                    tf.Variable(state_c, trainable=False),
+                    tf.Variable(state_h, trainable=False)))
+    elif isinstance(zero_states, tuple):
+        state_c, state_h = zero_states
+        state_variables.append(
+                rnn.LSTMStateTuple(
+                    tf.Variable(state_c, trainable=False),
+                    tf.Variable(state_h, trainable=False)))
+    # Return as a tuple, so that it can be fed to dynamic_rnn as an initial state
+    return tuple(state_variables)
+
+def get_state_update_op(state_variables, new_states, mask=None):
+    # Add an operation to update the train states with the last state tensors
+    update_ops = []
+    for state_variable, new_state in zip(state_variables, new_states):
+        # Assign the new state to the state variables on this layer
+        if mask in None:
+            update_ops.extend([
+                state_variable[0].assign(new_state[0]),
+                state_variable[1].assign(new_state[1])])
+        else:
+            update_ops.extend([
+                state_variable[0].assign(
+                    tf.where(mask, tf.zeros_like(new_state[0]), new_state[0])),
+                state_variable[1].assign(
+                    tf.where(mask, tf.zeros_like(new_state[1]), new_state[1]))])
+    # Return a tuple in order to combine all update_ops into a single operation.
+    # The tuple's actual value should not be used.
+    return tf.tuple(update_ops)
+
+
 class DQRNAgent(object):
     def __init__(self, state_shape, n_actions, network, cell, special=None):
         self.state_shape = state_shape
@@ -270,30 +291,24 @@ class DQRNAgent(object):
         self.special = special
         self.scope = special.get("scope", "dqrn")
 
-        with tf.variable_scope(self.scope):
-            self._build_graph(network, cell)
+        # with tf.variable_scope(self.scope):
+        self._build_graph(network, cell)
 
     def _build_graph(self, network, cell):
         feature_net = FeatureNet(self.state_shape, network, self.special.get("feature_net", None))
 
         n_games = self.special["n_games"]
-        self.belief_state = tf.Variable(
-            initial_value=tf.zeros([n_games, cell.state_size], dtype=tf.float32),
-            expected_shape=[n_games, cell.state_size],
-            dtype=tf.float32,
-            trainable=False,
-            name="belief_state")
-
+        with tf.variable_scope("belief_state"):
+            self.belief_state = get_state_variables(n_games, cell)
+        
         logits, rnn_states = tf.nn.dynamic_rnn(
             cell, tf.expand_dims(feature_net.hidden_state, 1),
             sequence_length=[1] * n_games, initial_state=self.belief_state)
 
         self.logits = tf.squeeze(logits, 1)
-        self.belief_update = self.belief_state.assign(
-            tf.where(
-                self.is_end,
-                tf.zeros_like(rnn_states),
-                rnn_states))
+
+        import pdb; pdb.set_trace()
+        self.belief_update = get_state_update_op(self.belief_state, rnn_states, self.is_done)
 
         qvalue_net = QvalueNet(self.n_actions, self.logits, self.special.get("qvalue_net", None))
         self.qvalue_net = build_optimization(
@@ -587,19 +602,20 @@ def run(env, q_learning_args, update_args, agent_args,
     state_shape = env.observation_space.shape
 
     network = agent_args.get("network", None) or conv_network
-
+    cell = rnn.LSTMCell(512)
     q_net = DQRNAgent(
-        state_shape, n_actions, network, cell=rnn.GRUCell(512),
+        state_shape, n_actions, network, cell=cell,
         special=agent_args)
     # @TODO: very very hintly, need to find best solution
-    vars_of_interest = [
-        v for v in tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, q_net.scope)
-        if v.name != "{}/belief_state".format(q_net.scope)]
-
+    # vars_of_interest = [
+    #     v for v in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+    #     if not v.name.startswith("belief_state")]
+    vars_of_interest = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+    from pprint import pprint
+    import pdb; pdb.set_trace()
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
-
+    saver = tf.train.Saver(var_list=vars_of_interest)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-        saver = tf.train.Saver(var_list=vars_of_interest)
         model_dir = "./logs_" + env_name.replace(string.punctuation, "_")
 
         if not load:
@@ -614,7 +630,8 @@ def run(env, q_learning_args, update_args, agent_args,
         create_if_need(model_dir)
         saver.save(
             sess, "{}/model.ckpt".format(model_dir),
-            global_step=q_net.feature_net.global_step)
+            meta_graph_suffix='meta', write_meta_graph=True)
+        # tf.train.write_graph(sess.graph_def, model_dir, "graph.pb", False)
 
     if plot_stats:
         stats_dir = os.path.join(model_dir, "stats")
@@ -626,15 +643,19 @@ def run(env, q_learning_args, update_args, agent_args,
 
         agent_args["n_games"] = 1
         q_net = DQRNAgent(
-            state_shape, n_actions, network, cell=rnn.GRUCell(512),
+            state_shape, n_actions, network, cell=cell,
             special=agent_args)
 
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-            saver = tf.train.Saver(var_list=vars_of_interest)
+            import pdb; pdb.set_trace()
             saver.restore(sess, "{}/model.ckpt".format(model_dir))
+            import pdb; pdb.set_trace()
 
             env_name = env_name.replace("Deterministic", "")
-            env = gym.make(env_name)
+            env = PreprocessImage(
+                gym.make(env_name),
+                width=84, height=84, grayscale=True,
+                crop=lambda img: img[60:-30, 7:])
             env = gym.wrappers.Monitor(env, "{}/monitor".format(model_dir), force=True)
             sessions = [generate_session(sess, q_net, env, int(1e10), epsilon=0.01, update_fn=None)
                         for _ in range(300)]
