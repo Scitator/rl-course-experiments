@@ -577,6 +577,10 @@ def _parse_args():
         '--n_games',
         type=int,
         default=10)
+    parser.add_argument(
+        '--linear_lstm',
+        action='store_true',
+        default=False)
 
     parser.add_argument(
         '--reward_norm',
@@ -588,7 +592,7 @@ def _parse_args():
 
 
 def run(env, q_learning_args, update_args, agent_args,
-        n_games,
+        n_games, linear_lstm=False,
         plot_stats=False, api_key=None,
         load=False, gpu_option=0.4):
     env_name = env
@@ -602,7 +606,7 @@ def run(env, q_learning_args, update_args, agent_args,
     state_shape = env.observation_space.shape
 
     network = agent_args.get("network", None) or conv_network
-    cell = rnn.LSTMCell(512)
+    cell = rnn.LSTMCell(512, activation=None if linear_lstm else tf.tanh)
     q_net = DQRNAgent(
         state_shape, n_actions, network, cell=cell,
         special=agent_args)
@@ -693,7 +697,7 @@ def main():
         "qvalue_net_optimiaztion": optimization_params
     }
     run(args.env, q_learning_args, update_args, agent_args,
-        args.n_games,
+        args.n_games, args.linear_lstm,
         args.plot_stats, args.api_key,
         args.load, args.gpu_option)
 
