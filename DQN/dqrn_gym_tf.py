@@ -243,29 +243,29 @@ class QvalueNet(object):
 def get_state_variables(batch_size, cell):
     # For each layer, get the initial state and make a variable out of it
     # to enable updating its value.
-    state_variables = []
     zero_states = cell.zero_state(batch_size, tf.float32)
     if isinstance(zero_states, list):
+        state_variables = []
         for state_c, state_h in zero_states:
             state_variables.append(
                 rnn.LSTMStateTuple(
                     tf.Variable(state_c, trainable=False),
                     tf.Variable(state_h, trainable=False)))
+        # Return as a tuple, so that it can be fed to dynamic_rnn as an initial state
+        return tuple(state_variables)
     elif isinstance(zero_states, tuple):
         state_c, state_h = zero_states
-        state_variables.append(
-                rnn.LSTMStateTuple(
-                    tf.Variable(state_c, trainable=False),
-                    tf.Variable(state_h, trainable=False)))
-    # Return as a tuple, so that it can be fed to dynamic_rnn as an initial state
-    return tuple(state_variables)
+        return rnn.LSTMStateTuple(
+            tf.Variable(state_c, trainable=False),
+            tf.Variable(state_h, trainable=False))
+
 
 def get_state_update_op(state_variables, new_states, mask=None):
     # Add an operation to update the train states with the last state tensors
     update_ops = []
     for state_variable, new_state in zip(state_variables, new_states):
         # Assign the new state to the state variables on this layer
-        if mask in None:
+        if mask is None:
             update_ops.extend([
                 state_variable[0].assign(new_state[0]),
                 state_variable[1].assign(new_state[1])])
@@ -300,15 +300,15 @@ class DQRNAgent(object):
         n_games = self.special["n_games"]
         with tf.variable_scope("belief_state"):
             self.belief_state = get_state_variables(n_games, cell)
-        
+
         logits, rnn_states = tf.nn.dynamic_rnn(
             cell, tf.expand_dims(feature_net.hidden_state, 1),
             sequence_length=[1] * n_games, initial_state=self.belief_state)
 
         self.logits = tf.squeeze(logits, 1)
 
-        import pdb; pdb.set_trace()
-        self.belief_update = get_state_update_op(self.belief_state, rnn_states, self.is_done)
+        # @TODO: very hacky 2
+        self.belief_update = get_state_update_op([self.belief_state], [rnn_states], self.is_end)
 
         qvalue_net = QvalueNet(self.n_actions, self.logits, self.special.get("qvalue_net", None))
         self.qvalue_net = build_optimization(
@@ -612,7 +612,7 @@ def run(env, q_learning_args, update_args, agent_args,
     #     if not v.name.startswith("belief_state")]
     vars_of_interest = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
     from pprint import pprint
-    import pdb; pdb.set_trace()
+
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
     saver = tf.train.Saver(var_list=vars_of_interest)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
@@ -645,11 +645,15 @@ def run(env, q_learning_args, update_args, agent_args,
         q_net = DQRNAgent(
             state_shape, n_actions, network, cell=cell,
             special=agent_args)
+        vars_of_interest = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+        saver = tf.train.Saver(var_list=vars_of_interest)
 
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-            import pdb; pdb.set_trace()
+            # sess.run(tf.variables_initializer(
+            #     [v for v in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
+            #      if v.name.startswith("belief_state")]))
+            sess.run(tf.global_variables_initializer())
             saver.restore(sess, "{}/model.ckpt".format(model_dir))
-            import pdb; pdb.set_trace()
 
             env_name = env_name.replace("Deterministic", "")
             env = PreprocessImage(
