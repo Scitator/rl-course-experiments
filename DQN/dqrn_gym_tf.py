@@ -621,6 +621,8 @@ def run(env, q_learning_args, update_args, agent_args,
     saver = tf.train.Saver(var_list=vars_of_interest)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         model_dir = "./logs_" + env_name.replace(string.punctuation, "_")
+        if linear_lstm:
+            model_dir += "_linear_lstm"
 
         if not load:
             sess.run(tf.global_variables_initializer())
