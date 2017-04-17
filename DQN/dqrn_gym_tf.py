@@ -124,7 +124,7 @@ class FeatureNet(object):
 
 
 class PolicyNet(object):
-    def __init__(self, n_actions, hidden_state, special=None):
+    def __init__(self, hidden_state, n_actions, special=None):
         self.special = special or {}
         self.n_actions = n_actions
 
@@ -157,7 +157,7 @@ class PolicyNet(object):
                 tf.reduce_sum(
                     self.predicted_probs * tf.log(self.predicted_probs),
                     axis=-1))
-            self.loss += H * self.special.get("entropy_koef", 0.001)
+            self.loss += H * self.special.get("entropy_koef", 0.01)
 
     def _probs(self, hidden_state, scope, reuse=False):
         with tf.variable_scope(scope, reuse=reuse):
@@ -202,7 +202,7 @@ class StateValueNet(object):
 
 
 class QvalueNet(object):
-    def __init__(self, n_actions, hidden_state, special=None):
+    def __init__(self, hidden_state, n_actions, special=None):
         self.special = special or {}
         self.n_actions = n_actions
 
@@ -311,7 +311,7 @@ class DQRNAgent(object):
         # @TODO: very hacky 2
         self.belief_update = get_state_update_op([self.belief_state], [rnn_states], self.is_end)
 
-        qvalue_net = QvalueNet(self.n_actions, self.logits, self.special.get("qvalue_net", None))
+        qvalue_net = QvalueNet(self.logits, self.n_actions, self.special.get("qvalue_net", None))
         self.qvalue_net = build_optimization(
             qvalue_net,
             self.special.get("qvalue_net_optimization", None))
