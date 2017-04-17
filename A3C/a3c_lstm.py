@@ -185,7 +185,8 @@ class StateValueNet(object):
             self._state_value(
                 hidden_state,
                 scope=self.scope + "/state_value",
-                reuse=self.special.get("reuse_state_value", False)))
+                reuse=self.special.get("reuse_state_value", False)),
+            axis=1)
 
         self.loss = tf.losses.mean_squared_error(
             labels=self.td_target,
@@ -454,7 +455,7 @@ def generate_session(
     return total_reward, total_policy_loss,  total_state_loss, t
 
 
-def dqrn_learning(
+def a3c_lstm_learning(
         sess, q_net, env, update_fn,
         n_epochs=1000, n_sessions=100, t_max=1000):
     tr = trange(
@@ -618,6 +619,11 @@ def run(env, q_learning_args, update_args, agent_args,
     q_net = A3CLstmAgent(
         state_shape, n_actions, network, cell=cell,
         special=agent_args)
+
+    model_dir = "./logs_" + env_name.replace(string.punctuation, "_")
+    model_dir += "_{}".format(lstm_activation)
+    create_if_need(model_dir)
+
     # @TODO: very very hintly, need to find best solution
     # vars_of_interest = [
     #     v for v in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
@@ -626,20 +632,18 @@ def run(env, q_learning_args, update_args, agent_args,
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
     saver = tf.train.Saver(var_list=vars_of_interest)
-    with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-        model_dir = "./logs_" + env_name.replace(string.punctuation, "_")
-        model_dir += "_{}".format(lstm_activation)
 
+    with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         if not load:
             sess.run(tf.global_variables_initializer())
         else:
             saver.restore(sess, "{}/model.ckpt".format(model_dir))
 
-        stats = dqrn_learning(
+        stats = a3c_lstm_learning(
             sess, q_net, env,
             update_fn=update_wraper(**update_args),
             **q_learning_args)
-        create_if_need(model_dir)
+
         saver.save(
             sess, "{}/model.ckpt".format(model_dir),
             meta_graph_suffix='meta', write_meta_graph=True)
