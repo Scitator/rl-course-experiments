@@ -578,9 +578,9 @@ def _parse_args():
         type=int,
         default=10)
     parser.add_argument(
-        '--linear_lstm',
-        action='store_true',
-        default=False)
+        '--lstm_activation',
+        type=str,
+        default="tanh")
 
     parser.add_argument(
         '--reward_norm',
@@ -592,7 +592,7 @@ def _parse_args():
 
 
 def run(env, q_learning_args, update_args, agent_args,
-        n_games, linear_lstm=False,
+        n_games, lstm_activation="tanh",
         plot_stats=False, api_key=None,
         load=False, gpu_option=0.4):
     env_name = env
@@ -606,7 +606,7 @@ def run(env, q_learning_args, update_args, agent_args,
     state_shape = env.observation_space.shape
 
     network = agent_args.get("network", None) or conv_network
-    cell = rnn.LSTMCell(512, activation=lambda x: x if linear_lstm else tf.tanh)
+    cell = rnn.LSTMCell(512, activation=activations[lstm_activation])
     q_net = DQRNAgent(
         state_shape, n_actions, network, cell=cell,
         special=agent_args)
@@ -615,14 +615,12 @@ def run(env, q_learning_args, update_args, agent_args,
     #     v for v in tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES)
     #     if not v.name.startswith("belief_state")]
     vars_of_interest = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-    from pprint import pprint
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
     saver = tf.train.Saver(var_list=vars_of_interest)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         model_dir = "./logs_" + env_name.replace(string.punctuation, "_")
-        if linear_lstm:
-            model_dir += "_linear_lstm"
+        model_dir += "_{}".format(lstm_activation)
 
         if not load:
             sess.run(tf.global_variables_initializer())
@@ -699,7 +697,7 @@ def main():
         "qvalue_net_optimiaztion": optimization_params
     }
     run(args.env, q_learning_args, update_args, agent_args,
-        args.n_games, args.linear_lstm,
+        args.n_games, args.lstm_activation,
         args.plot_stats, args.api_key,
         args.load, args.gpu_option)
 
