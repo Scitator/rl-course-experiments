@@ -289,7 +289,7 @@ class A3CLstmAgent(object):
         self.is_end = tf.placeholder(shape=[None], dtype=tf.bool, name="is_end")
 
         self.special = special
-        self.scope = special.get("scope", "dqrn")
+        self.scope = special.get("scope", "a3c_lstm")
 
         # with tf.variable_scope(self.scope):
         self._build_graph(network, cell)
@@ -310,13 +310,13 @@ class A3CLstmAgent(object):
         # @TODO: very hacky 2
         self.belief_update = get_state_update_op([self.belief_state], [rnn_states], self.is_end)
 
-        state_value_net = StateValueNet(self.logits, self.special.get("qvalue_net", None))
+        state_value_net = StateValueNet(self.logits, self.special.get("state_value_net", None))
         self.state_value_net = build_optimization(
             state_value_net,
             self.special.get("state_value_net_optimization", None))
         feature_net.add_loss(self.state_value_net.loss)
 
-        policy_net = PolicyNet(self.logits, self.n_actions, self.special.get("qvalue_net", None))
+        policy_net = PolicyNet(self.logits, self.n_actions, self.special.get("policy_net", None))
         self.policy_net = build_optimization(
             policy_net,
             self.special.get("policy_net_optimization", None))
@@ -701,7 +701,8 @@ def main():
         "n_games": args.n_games,
         "network": network,
         "feature_net_optimization": optimization_params,
-        "qvalue_net_optimiaztion": optimization_params
+        "state_value_net_optimiaztion": optimization_params,
+        "policy_net_optimiaztion": optimization_params
     }
     run(args.env, q_learning_args, update_args, agent_args,
         args.n_games, args.lstm_activation,
