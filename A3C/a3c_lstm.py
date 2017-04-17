@@ -608,7 +608,7 @@ def run(env, q_learning_args, update_args, agent_args,
     env = EnvPool(
         PreprocessImage(
             gym.make(env_name).env,
-            width=84, height=84, grayscale=True,
+            width=64, height=64, grayscale=True,
             crop=lambda img: img[60:-30, 7:]), n_games)
 
     n_actions = env.action_space.n
