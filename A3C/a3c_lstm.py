@@ -599,17 +599,29 @@ def _parse_args():
     args, _ = parser.parse_known_args()
     return args
 
+def make_env(env, n_games=1, width=64, height=64, 
+             grayscale=True, crop=lambda img: img[60:-30, 7:]):
+        if n_games > 1:
+            return EnvPool(
+                PreprocessImage(
+                    env,
+                    width=width, height=height, grayscale=grayscale,
+                    crop=crop), 
+                n_games)
+        else:
+            return PreprocessImage(
+                env,
+                width=width, height=height, grayscale=grayscale,
+                crop=crop)
+
 
 def run(env, q_learning_args, update_args, agent_args,
         n_games, lstm_activation="tanh",
         plot_stats=False, api_key=None,
         load=False, gpu_option=0.4):
     env_name = env
-    env = EnvPool(
-        PreprocessImage(
-            gym.make(env_name).env,
-            width=64, height=64, grayscale=True,
-            crop=lambda img: img[60:-30, 7:]), n_games)
+
+    env = make_env(gym.make(env_name).env, n_games)
 
     n_actions = env.action_space.n
     state_shape = env.observation_space.shape
@@ -672,10 +684,7 @@ def run(env, q_learning_args, update_args, agent_args,
             saver.restore(sess, "{}/model.ckpt".format(model_dir))
 
             env_name = env_name.replace("Deterministic", "")
-            env = PreprocessImage(
-                gym.make(env_name),
-                width=84, height=84, grayscale=True,
-                crop=lambda img: img[60:-30, 7:])
+            env = make_env(gym.make(env_name))
             env = gym.wrappers.Monitor(env, "{}/monitor".format(model_dir), force=True)
             sessions = [generate_session(sess, q_net, env, int(1e10), update_fn=None)
                         for _ in range(300)]
