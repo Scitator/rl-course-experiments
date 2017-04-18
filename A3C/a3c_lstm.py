@@ -599,6 +599,7 @@ def _parse_args():
     args, _ = parser.parse_known_args()
     return args
 
+
 def make_env(env, n_games=1, width=64, height=64, 
              grayscale=True, crop=lambda img: img[60:-30, 7:]):
         if n_games > 1:
