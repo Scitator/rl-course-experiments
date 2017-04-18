@@ -677,6 +677,7 @@ def run(env, q_learning_args, update_args, agent_args,
 
             env_name = env_name.replace("Deterministic", "")
             env = make_env(gym.make(env_name))
+            env = gym.wrappers.Monitor(env, "{}/monitor".format(model_dir), force=True)
             sessions = [generate_session(sess, q_net, env, int(1e10), epsilon=0.01, update_fn=None)
                         for _ in range(300)]
             env.close()
