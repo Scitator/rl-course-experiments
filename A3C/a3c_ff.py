@@ -58,7 +58,7 @@ activations = {
 }
 
 
-def update_varlist(loss, optimizer, var_list, scope, reuse=False, grad_clip=5.0, global_step=None):
+def update_varlist(loss, optimizer, var_list, scope, reuse=False, grad_clip=10.0, global_step=None):
     with tf.variable_scope(scope) as scope:
         if reuse:
             scope.reuse_variables()
@@ -106,7 +106,7 @@ class PolicyAgent(object):
                 tf.reduce_sum(
                     self.predicted_probs * tf.log(self.predicted_probs),
                     axis=-1))
-            self.loss += H * 0.01
+            self.loss += H * 0.001
 
         optimizer = tf.train.AdamOptimizer(self.special.get("policy_lr", 1e-4))
         self.hidden_state_update = update_varlist(
@@ -245,21 +245,26 @@ def action(agent, sess, state):
 def update(sess, aac_agent, transitions, discount_factor=0.99, batch_size=32, time_major=True):
     policy_targets = []
     value_targets = []
+    state_history = []
+    action_history = []
 
-    cumulative_rewards = np.zeros_like(transitions[-1].reward) + \
+    cumulative_reward = np.zeros_like(transitions[-1].reward) + \
         np.invert(transitions[-1].done) * \
         aac_agent.value_net.predict(sess, transitions[-1].next_state)
     for transition in reversed(transitions):
-        cumulative_rewards = transition.reward + discount_factor * cumulative_rewards
-        policy_target = cumulative_rewards - aac_agent.value_net.predict(sess, transition.state)
+        cumulative_reward = transition.reward + \
+            np.invert(transition.done) * discount_factor * cumulative_reward
+        policy_target = cumulative_reward - aac_agent.value_net.predict(sess, transition.state)
 
-        value_targets.append(cumulative_rewards)
+        value_targets.append(cumulative_reward)
         policy_targets.append(policy_target)
+        state_history.append(transition.state)
+        action_history.append(transition.action)
+
     value_targets = np.array(value_targets)
     policy_targets = np.array(policy_targets)
-
-    state_history = np.array([x.state for x in reversed(transitions)])  # time-major
-    action_history = np.array([x.action for x in reversed(transitions)])
+    state_history = np.array(state_history) # time-major
+    action_history = np.array(action_history)
 
     if not time_major:
         state_history = state_history.swapaxes(0, 1)
@@ -325,7 +330,7 @@ def generate_session(
     if update_fn is not None:
         total_policy_loss, total_value_loss = update_fn(sess, aac_agent, transitions)
 
-    return total_reward, total_policy_loss, total_state_loss,  t
+    return total_reward, total_policy_loss, total_state_loss, t
 
 
 def generate_sessions(sess, aac_agent, env_pool, t_max=1000, update_fn=None):
@@ -350,7 +355,7 @@ def generate_sessions(sess, aac_agent, env_pool, t_max=1000, update_fn=None):
     if update_fn is not None:
         total_policy_loss, total_value_loss = update_fn(sess, aac_agent, transitions)
 
-    return total_reward / t_max, total_policy_loss, total_value_loss, total_games
+    return total_reward / t_max, total_policy_loss, total_value_loss, total_games / t_max
 
 
 def actor_critic_learning(
