@@ -499,10 +499,13 @@ def run(env, q_learning_args, update_args, agent_agrs,
         else:
             saver.restore(sess, "{}/model.ckpt".format(model_dir))
 
-        stats = actor_critic_learning(
-            sess, q_net, env,
-            update_fn=update_wraper(**update_args),
-            **q_learning_args)
+        try:
+            stats = actor_critic_learning(
+                sess, q_net, env,
+                update_fn=update_wraper(**update_args),
+                **q_learning_args)
+        except KeyboardInterrupt:
+            print("Exiting training procedure")
         create_if_need(model_dir)
         saver.save(sess, "{}/model.ckpt".format(model_dir))
 
