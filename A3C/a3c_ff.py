@@ -17,6 +17,16 @@ plt.style.use("ggplot")
 
 from wrappers import EnvPool
 
+Transition = collections.namedtuple(
+    "Transition",
+    ["state", "action", "reward", "next_state", "done"])
+
+
+def chunks(l, n):
+    """Yield successive n-sized chunks from l."""
+    for i in range(0, len(l), n):
+        yield l[i:i + n]
+
 
 def create_if_need(path):
     if not os.path.exists(path):
@@ -46,20 +56,6 @@ activations = {
     "elu": tf.nn.elu,
     "softplus": tf.nn.softplus
 }
-
-
-class ObservationsBuffer(object):
-    def __init__(self, buffer_len=10000):
-        self.buffer = collections.deque(maxlen=buffer_len)
-
-    def observe(self, state, action, reward, next_state, done):
-        self.buffer.append(
-            (state, action, reward, next_state, done))
-
-    def get_batch(self, batch_size):
-        batch_ids = np.random.choice(len(self.buffer), batch_size)
-        batch = np.array([self.buffer[i] for i in batch_ids])
-        return batch
 
 
 def update_varlist(loss, optimizer, var_list, scope, reuse=False, grad_clip=5.0, global_step=None):
@@ -180,6 +176,9 @@ class ValueAgent(object):
                 scope=self.scope + "_state_value",
                 reuse=self.special.get("reuse_state_value", False)))
 
+        # self.loss = tf.reduce_mean(
+        #     tf.square(self.td_targets - self.predicted_values))
+
         self.loss = tf.losses.mean_squared_error(
             labels=self.td_targets,
             predictions=self.predicted_values)
@@ -239,98 +238,123 @@ class AACAgent(object):
 
 def action(agent, sess, state):
     probs = agent.policy_net.predict(sess, state)
-    actions = [np.random.choice(len(row), p=row) for row in probs]
+    actions = [np.random.choice(np.arange(len(row)), p=row) for row in probs]
     return actions
 
 
-def update(sess, aac_agent, memory, discount_factor=0.99, batch_size=32):
-    policy_loss = 0.0
-    value_loss = 0.0
+def update(sess, aac_agent, transitions, discount_factor=0.99, batch_size=32, time_major=True):
+    policy_targets = []
+    value_targets = []
 
-    if len(memory.buffer) >= batch_size:
-        batch_ids = np.random.choice(len(memory.buffer), batch_size)
-        batch = np.array([memory.buffer[i] for i in batch_ids])
+    cumulative_rewards = np.zeros_like(transitions[-1].reward) + \
+        np.invert(transitions[-1].done) * \
+        aac_agent.value_net.predict(sess, transitions[-1].next_state)
+    for transition in reversed(transitions):
+        cumulative_rewards = transition.reward + discount_factor * cumulative_rewards
+        policy_target = cumulative_rewards - aac_agent.value_net.predict(sess, transition.state)
 
-        state_batch = np.vstack(batch[:, 0]).reshape((-1,) + aac_agent.state_shape)
-        action_batch = np.vstack(batch[:, 1]).reshape(-1)
-        reward_batch = np.vstack(batch[:, 2]).reshape(-1)
-        next_state_batch = np.vstack(batch[:, 3]).reshape((-1,) + aac_agent.state_shape)
-        done_batch = np.vstack(batch[:, 4]).reshape(-1)
+        value_targets.append(cumulative_rewards)
+        policy_targets.append(policy_target)
+    value_targets = np.array(value_targets)
+    policy_targets = np.array(policy_targets)
 
-        values = aac_agent.value_net.predict(sess, state_batch)
-        values_next = aac_agent.value_net.predict(sess, next_state_batch)
-        td_target = reward_batch + \
-            np.invert(done_batch).astype(np.float32) * \
-            discount_factor * values_next
-        td_error = td_target - values
+    state_history = np.array([x.state for x in reversed(transitions)])  # time-major
+    action_history = np.array([x.action for x in reversed(transitions)])
 
-        value_loss = aac_agent.value_net.update(sess, state_batch, td_target)
+    if not time_major:
+        state_history = state_history.swapaxes(0, 1)
+        action_history = action_history.swapaxes(0, 1)
+        value_targets = value_targets.swapaxes(0, 1)
+        policy_targets = policy_targets.swapaxes(0, 1)
 
-        policy_loss = aac_agent.policy_net.update(sess, state_batch, action_batch, td_error)
+    time_len = state_history.shape[0]
 
-    return policy_loss, value_loss
+    value_loss, policy_loss = 0.0, 0.0
+    for state_axis, action_axis, value_target_axis, policy_target_axis in \
+            zip(state_history, action_history, value_targets, policy_targets):
+        axis_len = state_axis.shape[0]
+        axis_value_loss, axis_policy_loss = 0.0, 0.0
+
+        state_axis = chunks(state_axis, batch_size)
+        action_axis = chunks(action_axis, batch_size)
+        value_target_axis = chunks(value_target_axis, batch_size)
+        policy_target_axis = chunks(policy_target_axis, batch_size)
+
+        for state_batch, action_batch, value_target, policy_target in \
+                zip(state_axis, action_axis, value_target_axis, policy_target_axis):
+            axis_value_loss += aac_agent.value_net.update(
+                sess, state_batch, value_target)
+            axis_policy_loss += aac_agent.policy_net.update(
+                sess, state_batch, action_batch, policy_target)
+
+        policy_loss += axis_policy_loss / axis_len
+        value_loss += axis_value_loss / axis_len
+
+    return policy_loss / time_len, value_loss / time_len
 
 
-def update_wraper(discount_factor=0.99, batch_size=32):
+def update_wraper(discount_factor=0.99, batch_size=32, time_major=False):
     def wrapper(sess, q_net, memory):
-        return update(sess, q_net, memory, discount_factor, batch_size)
+        return update(sess, q_net, memory, discount_factor, batch_size, time_major)
 
     return wrapper
 
 
 def generate_session(
-        sess, aac_agent, memory, env, t_max=1000, update_fn=None):
+        sess, aac_agent, env, t_max=1000, update_fn=None):
     total_reward = 0
     total_policy_loss, total_state_loss = 0, 0
-    s = env.reset()
 
+    transitions = []
+
+    s = env.reset()
     for t in range(t_max):
         a = action(aac_agent, sess, np.array([s], dtype=np.float32))[0]
 
-        new_s, r, done, _ = env.step(a)
+        next_s, r, done, _ = env.step(a)
 
-        if update_fn is not None:
-            memory.observe(s, a, r, new_s, done)
-            curr_policy_loss, curr_state_loss = update_fn(sess, aac_agent, memory)
-            total_policy_loss += curr_policy_loss
-            total_state_loss += curr_state_loss
+        transitions.append(Transition(
+            state=s, action=a, reward=r, next_state=next_s, done=done))
 
         total_reward += r
 
-        s = new_s
+        s = next_s
         if done:
             break
 
-    return total_reward, total_policy_loss / float(t + 1), total_state_loss / float(t + 1),  t
+    if update_fn is not None:
+        total_policy_loss, total_value_loss = update_fn(sess, aac_agent, transitions)
+
+    return total_reward, total_policy_loss, total_state_loss,  t
 
 
-def generate_sessions(sess, aac_agent, memory, env_pool, t_max=1000, update_fn=None):
+def generate_sessions(sess, aac_agent, env_pool, t_max=1000, update_fn=None):
     total_reward = 0.0
     total_policy_loss, total_value_loss = 0, 0
     total_games = 0.0
 
+    transitions = []
+
     states = env_pool.pool_states()
     for t in range(t_max):
         actions = action(aac_agent, sess, states)
-        new_states, rewards, dones, _ = env_pool.step(actions)
+        next_states, rewards, dones, _ = env_pool.step(actions)
 
-        if update_fn is not None:
-            for s, a, r, new_s, done in zip(states, actions, rewards, new_states, dones):
-                memory.observe(s, a, r, new_s, done)
-            curr_policy_loss, curr_state_loss = update_fn(sess, aac_agent, memory)
-            total_policy_loss += curr_policy_loss
-            total_value_loss += curr_state_loss
-
-        states = new_states
+        transitions.append(Transition(
+            state=states, action=actions, reward=rewards, next_state=next_states, done=dones))
+        states = next_states
 
         total_reward += rewards.mean()
         total_games += dones.sum()
 
-    return total_reward, total_policy_loss, total_value_loss, total_games
+    if update_fn is not None:
+        total_policy_loss, total_value_loss = update_fn(sess, aac_agent, transitions)
+
+    return total_reward / t_max, total_policy_loss, total_value_loss, total_games
 
 
 def actor_critic_learning(
-        sess, q_net, memory, env, update_fn,
+        sess, q_net, env, update_fn,
         n_epochs=1000, n_sessions=100, t_max=1000):
     tr = trange(
         n_epochs,
@@ -346,7 +370,7 @@ def actor_critic_learning(
 
     for i in tr:
         sessions = [
-            generate_sessions(sess, q_net, memory, env, t_max, update_fn=update_fn)
+            generate_sessions(sess, q_net, env, t_max, update_fn=update_fn)
             for _ in range(n_sessions)]
         session_rewards, session_policy_loss, session_value_loss, session_steps = \
             map(np.array, zip(*sessions))
@@ -417,18 +441,15 @@ def _parse_args():
     parser.add_argument('--activation',
                         type=str,
                         default="elu")
-    parser.add_argument('--batch_size',
-                        type=int,
-                        default=64)
-    parser.add_argument('--buffer_len',
-                        type=int,
-                        default=1000)
     parser.add_argument('--load',
                         action='store_true',
                         default=False)
     parser.add_argument('--gpu_option',
                         type=float,
                         default=0.45)
+    parser.add_argument('--batch_size',
+                        type=int,
+                        default=10)
     parser.add_argument('--policy_lr',
                         type=float,
                         default=1e-3)
@@ -438,6 +459,9 @@ def _parse_args():
     parser.add_argument('--n_games',
                         type=int,
                         default=10)
+    parser.add_argument('--time_major',
+                        action='store_true',
+                        default=False)
 
     args, _ = parser.parse_known_args()
     return args
@@ -455,8 +479,6 @@ def run(env, q_learning_args, update_args, agent_agrs,
 
     network = agent_agrs["network"] or linear_network
 
-    memory = ObservationsBuffer(agent_agrs["buffer_len"])
-
     q_net = AACAgent(
         state_shape, n_actions, network,
         special=agent_agrs)
@@ -473,7 +495,7 @@ def run(env, q_learning_args, update_args, agent_agrs,
             saver.restore(sess, "{}/model.ckpt".format(model_dir))
 
         stats = actor_critic_learning(
-            sess, q_net, memory, env,
+            sess, q_net, env,
             update_fn=update_wraper(**update_args),
             **q_learning_args)
         create_if_need(model_dir)
@@ -487,7 +509,7 @@ def run(env, q_learning_args, update_args, agent_agrs,
         if api_key is not None:
             env = gym.make(env_name)
             env = gym.wrappers.Monitor(env, "{}/monitor".format(model_dir), force=True)
-            sessions = [generate_session(sess, q_net, memory, env, int(1e10), update_fn=None)
+            sessions = [generate_session(sess, q_net, env, int(1e10), update_fn=None)
                         for _ in range(300)]
             env.close()
             gym.upload("{}/monitor".format(model_dir), api_key=api_key)
@@ -507,13 +529,13 @@ def main():
     }
     update_args = {
         "discount_factor": args.gamma,
-        "batch_size": args.batch_size
+        "batch_size": args.batch_size,
+        "time_major": args.time_major
     }
     agent_args = {
         "network": network,
         "policy_lr": args.policy_lr,
         "value_lr": args.value_lr,
-        "buffer_len": args.buffer_len
     }
     run(args.env, q_learning_args, update_args, agent_args,
         args.n_games,
