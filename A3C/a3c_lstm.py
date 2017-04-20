@@ -641,9 +641,17 @@ def _parse_args():
         default=0.45)
 
     parser.add_argument(
-        '--initial_lr',
+        '--policy_lr',
         type=float,
         default=1e-4)
+    parser.add_argument(
+        '--value_lr',
+        type=float,
+        default=1e-4)
+    parser.add_argument(
+        '--feature_lr',
+        type=float,
+        default=1e-3)
     parser.add_argument(
         '--lr_decay_steps',
         type=float,
@@ -796,10 +804,18 @@ def main():
         "time_major": args.time_major
     }
     optimization_params = {
-        "initial_lr": args.initial_lr,
+        "initial_lr": args.feature_lr,
         "decay_steps": args.lr_decay_steps,
         "lr_decay": args.lr_decay,
         "grad_clip": args.grad_clip
+    }
+    policy_optimization_params = {
+        **optimization_params,
+        **{"initial_lr": args.policy_lr}
+    }
+    value_optimization_params = {
+        **optimization_params,
+        **{"initial_lr": args.policy_lr}
     }
     policy_net_params = {
         "entropy_koef": args.entropy_koef
@@ -809,8 +825,8 @@ def main():
         "network": network,
         "policy_net": policy_net_params,
         "feature_net_optimization": optimization_params,
-        "state_value_net_optimiaztion": optimization_params,
-        "policy_net_optimiaztion": optimization_params
+        "state_value_net_optimiaztion": value_optimization_params,
+        "policy_net_optimiaztion": policy_optimization_params
     }
     run(args.env, q_learning_args, update_args, agent_args,
         args.n_games, args.lstm_activation,
