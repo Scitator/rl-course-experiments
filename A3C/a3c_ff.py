@@ -106,7 +106,7 @@ class PolicyAgent(object):
                 tf.reduce_sum(
                     self.predicted_probs * tf.log(self.predicted_probs),
                     axis=-1))
-            self.loss += H * 0.001
+            self.loss += H * self.special.get("entropy_koef", 0.1)
 
         optimizer = tf.train.AdamOptimizer(self.special.get("policy_lr", 1e-4))
         self.hidden_state_update = update_varlist(
@@ -249,11 +249,11 @@ def update(sess, aac_agent, transitions, discount_factor=0.99, batch_size=32, ti
     action_history = []
 
     cumulative_reward = np.zeros_like(transitions[-1].reward) + \
-        np.invert(transitions[-1].done) * \
-        aac_agent.value_net.predict(sess, transitions[-1].next_state)
+                        np.invert(transitions[-1].done) * \
+                        aac_agent.value_net.predict(sess, transitions[-1].next_state)
     for transition in reversed(transitions):
         cumulative_reward = transition.reward + \
-            np.invert(transition.done) * discount_factor * cumulative_reward
+                            np.invert(transition.done) * discount_factor * cumulative_reward
         policy_target = cumulative_reward - aac_agent.value_net.predict(sess, transition.state)
 
         value_targets.append(cumulative_reward)
@@ -263,7 +263,7 @@ def update(sess, aac_agent, transitions, discount_factor=0.99, batch_size=32, ti
 
     value_targets = np.array(value_targets)
     policy_targets = np.array(policy_targets)
-    state_history = np.array(state_history) # time-major
+    state_history = np.array(state_history)  # time-major
     action_history = np.array(action_history)
 
     if not time_major:
@@ -355,7 +355,7 @@ def generate_sessions(sess, aac_agent, env_pool, t_max=1000, update_fn=None):
     if update_fn is not None:
         total_policy_loss, total_value_loss = update_fn(sess, aac_agent, transitions)
 
-    return total_reward / t_max, total_policy_loss, total_value_loss, total_games / t_max
+    return total_reward, total_policy_loss, total_value_loss, total_games
 
 
 def actor_critic_learning(
@@ -398,7 +398,6 @@ def linear_network(states, scope=None, reuse=False, is_training=False, layers=No
                    activation_fn=tf.nn.elu):
     layers = layers or [16, 16]
     with tf.variable_scope(scope or "network") as scope:
-
         if reuse:
             scope.reuse_variables()
 
@@ -461,6 +460,9 @@ def _parse_args():
     parser.add_argument('--value_lr',
                         type=float,
                         default=1e-3)
+    parser.add_argument('--entropy_koef',
+                        type=float,
+                        default=1e-2)
     parser.add_argument('--n_games',
                         type=int,
                         default=10)
@@ -544,6 +546,7 @@ def main():
         "network": network,
         "policy_lr": args.policy_lr,
         "value_lr": args.value_lr,
+        "entropy_koef": args.entropy_koef
     }
     run(args.env, q_learning_args, update_args, agent_args,
         args.n_games,
