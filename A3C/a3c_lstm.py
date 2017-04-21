@@ -570,19 +570,25 @@ def conv_network(
             num_outputs=32,
             kernel_size=8,
             stride=4,
-            activation_fn=activation_fn)
+            activation_fn=activation_fn,
+            normalizer_fn=tflayers.batch_norm,
+            normalizer_params={"is_training": is_training})
         conv = tflayers.conv2d(
             conv,
             num_outputs=64,
             kernel_size=4,
             stride=2,
-            activation_fn=activation_fn)
+            activation_fn=activation_fn,
+            normalizer_fn=tflayers.batch_norm,
+            normalizer_params={"is_training": is_training})
         conv = tflayers.conv2d(
             conv,
             num_outputs=64,
             kernel_size=3,
             stride=1,
-            activation_fn=activation_fn)
+            activation_fn=activation_fn,
+            normalizer_fn=tflayers.batch_norm,
+            normalizer_params={"is_training": is_training})
 
         flat = tflayers.flatten(conv)
         return flat

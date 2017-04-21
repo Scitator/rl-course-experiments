@@ -405,7 +405,9 @@ def linear_network(states, scope=None, reuse=False, is_training=False, layers=No
             states,
             tflayers.fully_connected,
             layers,
-            activation_fn=activation_fn)
+            activation_fn=activation_fn,
+            normalizer_fn=tflayers.batch_norm,
+            normalizer_params={"is_training": is_training})
 
         return hidden_state
 
