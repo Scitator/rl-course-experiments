@@ -89,6 +89,11 @@ ENV/
 .ropeproject
 
 .idea
+.code
 
 *.png
 *.pid
+
+*tmp*
+*logs*
+*.log
