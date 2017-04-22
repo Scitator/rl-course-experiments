@@ -11,6 +11,7 @@ from sklearn.linear_model import SGDRegressor
 from sklearn.kernel_approximation import RBFSampler
 
 from matplotlib import pyplot as plt
+
 plt.style.use("ggplot")
 
 
@@ -198,27 +199,33 @@ def q_learning(env, estimator, num_episodes, discount_factor=1.0, epsilon=0.1, e
 
 def _parse_args():
     parser = argparse.ArgumentParser(description='Policy iteration example')
-    parser.add_argument('--env',
-                        type=str,
-                        default='MountainCar-v0',  # CartPole-v0, MountainCar-v0
-                        help='The environment to use')
-    parser.add_argument('--num_episodes',
-                        type=int,
-                        default=1000,
-                        help='Number of episodes')
-    parser.add_argument('--gamma',
-                        type=float,
-                        default=0.99,
-                        help='Gamma discount factor')
-    parser.add_argument('--verbose',
-                        action='store_true',
-                        default=False)
-    parser.add_argument('--plot_stats',
-                        action='store_true',
-                        default=False)
-    parser.add_argument('--api_key',
-                        type=str,
-                        default=None)
+    parser.add_argument(
+        '--env',
+        type=str,
+        default='MountainCar-v0',  # CartPole-v0, MountainCar-v0
+        help='The environment to use')
+    parser.add_argument(
+        '--num_episodes',
+        type=int,
+        default=1000,
+        help='Number of episodes')
+    parser.add_argument(
+        '--gamma',
+        type=float,
+        default=0.99,
+        help='Gamma discount factor')
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        default=False)
+    parser.add_argument(
+        '--plot_stats',
+        action='store_true',
+        default=False)
+    parser.add_argument(
+        '--api_key',
+        type=str,
+        default=None)
 
     args, _ = parser.parse_known_args()
     return args

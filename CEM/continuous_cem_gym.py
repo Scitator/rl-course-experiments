@@ -178,50 +178,63 @@ def cem(env, agent, num_episodes, max_steps=int(1e6), step_penalty=0.01,
 
 def _parse_args():
     parser = argparse.ArgumentParser(description='Policy iteration example')
-    parser.add_argument('--env',
-                        type=str,
-                        default='MountainCarContinuous-v0',  # MountainCar-v0, LunarLander-v2
-                        help='The environment to use')
-    parser.add_argument('--num_episodes',
-                        type=int,
-                        default=200,
-                        help='Number of episodes')
-    parser.add_argument('--max_steps',
-                        type=int,
-                        default=int(1e5),
-                        help='Number of steps per episode')
-    parser.add_argument('--n_samples',
-                        type=int,
-                        default=1000,
-                        help='Games per epoch')
-    parser.add_argument('--step_penalty',
-                        type=float,
-                        default=0.01)
-    parser.add_argument('--percentile',
-                        type=int,
-                        default=80,
-                        help='percentile')
-    parser.add_argument('--verbose',
-                        action='store_true',
-                        default=False)
-    parser.add_argument('--plot_stats',
-                        action='store_true',
-                        default=False)
-    parser.add_argument('--layers',
-                        type=str,
-                        default=None)
-    parser.add_argument('--api_key',
-                        type=str,
-                        default=None)
-    parser.add_argument('--n_jobs',
-                        type=int,
-                        default=-1)
-    parser.add_argument('--seed',
-                        type=int,
-                        default=42)
-    parser.add_argument('--resume',
-                        action='store_true',
-                        default=False)
+    parser.add_argument(
+        '--env',
+        type=str,
+        default='MountainCarContinuous-v0',  # MountainCar-v0, LunarLander-v2
+        help='The environment to use')
+    parser.add_argument(
+        '--num_episodes',
+        type=int,
+        default=200,
+        help='Number of episodes')
+    parser.add_argument(
+        '--max_steps',
+        type=int,
+        default=int(1e5),
+        help='Number of steps per episode')
+    parser.add_argument(
+        '--n_samples',
+        type=int,
+        default=1000,
+        help='Games per epoch')
+    parser.add_argument(
+        '--step_penalty',
+        type=float,
+        default=0.01)
+    parser.add_argument(
+        '--percentile',
+        type=int,
+        default=80,
+        help='percentile')
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        default=False)
+    parser.add_argument(
+        '--plot_stats',
+        action='store_true',
+        default=False)
+    parser.add_argument(
+        '--layers',
+        type=str,
+        default=None)
+    parser.add_argument(
+        '--api_key',
+        type=str,
+        default=None)
+    parser.add_argument(
+        '--n_jobs',
+        type=int,
+        default=-1)
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=42)
+    parser.add_argument(
+        '--resume',
+        action='store_true',
+        default=False)
 
     args, _ = parser.parse_known_args()
     return args

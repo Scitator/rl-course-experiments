@@ -63,39 +63,48 @@ def mutation(env, policy, p=0.1):
 
 def _parse_args():
     parser = argparse.ArgumentParser(description='Policy iteration example')
-    parser.add_argument('--env',
-                        type=str,
-                        default='FrozenLake8x8-v0',
-                        help='The environment to use')
-    parser.add_argument('--num_episodes',
-                        type=int,
-                        default=200,
-                        help='Number of episodes')
-    parser.add_argument('--max_steps',
-                        type=int,
-                        default=200,
-                        help='Max number per episode')
-    parser.add_argument('--pool_size',
-                        type=int,
-                        default=200,
-                        help='Population size')
-    parser.add_argument('--n_crossovers',
-                        type=int,
-                        default=100,
-                        help='Number of crossovers per episode')
-    parser.add_argument('--n_mutations',
-                        type=int,
-                        default=100,
-                        help='Number of mutations per episode')
-    parser.add_argument('--seed',
-                        type=int,
-                        default=42)
-    parser.add_argument('--verbose',
-                        action='store_true',
-                        default=False)
-    parser.add_argument('--api_key',
-                        type=str,
-                        default=None)
+    parser.add_argument(
+        '--env',
+        type=str,
+        default='FrozenLake8x8-v0',
+        help='The environment to use')
+    parser.add_argument(
+        '--num_episodes',
+        type=int,
+        default=200,
+        help='Number of episodes')
+    parser.add_argument(
+        '--max_steps',
+        type=int,
+        default=200,
+        help='Max number per episode')
+    parser.add_argument(
+        '--pool_size',
+        type=int,
+        default=200,
+        help='Population size')
+    parser.add_argument(
+        '--n_crossovers',
+        type=int,
+        default=100,
+        help='Number of crossovers per episode')
+    parser.add_argument(
+        '--n_mutations',
+        type=int,
+        default=100,
+        help='Number of mutations per episode')
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=42)
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        default=False)
+    parser.add_argument(
+        '--api_key',
+        type=str,
+        default=None)
 
     args, _ = parser.parse_known_args()
     return args

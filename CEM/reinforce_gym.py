@@ -248,47 +248,60 @@ def network_wrapper(layers=None, activation_fn=tf.nn.elu):
 
 def _parse_args():
     parser = argparse.ArgumentParser(description='Policy iteration example')
-    parser.add_argument('--env',
-                        type=str,
-                        default='CartPole-v0',  # CartPole-v0, MountainCar-v0
-                        help='The environment to use')
-    parser.add_argument('--n_epochs',
-                        type=int,
-                        default=100)
-    parser.add_argument('--n_sessions',
-                        type=int,
-                        default=128)
-    parser.add_argument('--t_max',
-                        type=int,
-                        default=1000)
-    parser.add_argument('--gamma',
-                        type=float,
-                        default=0.99,
-                        help='Gamma discount factor')
-    parser.add_argument('--plot_stats',
-                        action='store_true',
-                        default=False)
-    parser.add_argument('--api_key',
-                        type=str,
-                        default=None)
-    parser.add_argument('--activation',
-                        type=str,
-                        default="elu")
-    parser.add_argument('--final_epsilon',
-                        type=float,
-                        default=0.01)
-    parser.add_argument('--load',
-                        action='store_true',
-                        default=False)
-    parser.add_argument('--gpu_option',
-                        type=float,
-                        default=0.45)
-    parser.add_argument('--initial_lr',
-                        type=float,
-                        default=1e-3)
-    parser.add_argument('--layers',
-                        type=str,
-                        default=None)
+    parser.add_argument(
+        '--env',
+        type=str,
+        default='CartPole-v0',  # CartPole-v0, MountainCar-v0
+        help='The environment to use')
+    parser.add_argument(
+        '--n_epochs',
+        type=int,
+        default=100)
+    parser.add_argument(
+        '--n_sessions',
+        type=int,
+        default=128)
+    parser.add_argument(
+        '--t_max',
+        type=int,
+        default=1000)
+    parser.add_argument(
+        '--gamma',
+        type=float,
+        default=0.99,
+        help='Gamma discount factor')
+    parser.add_argument(
+        '--plot_stats',
+        action='store_true',
+        default=False)
+    parser.add_argument(
+        '--api_key',
+        type=str,
+        default=None)
+    parser.add_argument(
+        '--activation',
+        type=str,
+        default="elu")
+    parser.add_argument(
+        '--final_epsilon',
+        type=float,
+        default=0.01)
+    parser.add_argument(
+        '--load',
+        action='store_true',
+        default=False)
+    parser.add_argument(
+        '--gpu_option',
+        type=float,
+        default=0.45)
+    parser.add_argument(
+        '--initial_lr',
+        type=float,
+        default=1e-3)
+    parser.add_argument(
+        '--layers',
+        type=str,
+        default=None)
 
     args, _ = parser.parse_known_args()
     return args
