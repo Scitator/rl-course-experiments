@@ -1,243 +1,62 @@
 #!/usr/bin/python3
 
 import gym
-from gym.wrappers import SkipWrapper
-import os
-import string
 import argparse
 import numpy as np
 import tensorflow as tf
-import tensorflow.contrib.layers as tflayers
-from tqdm import trange, tqdm
-import collections
+from tqdm import trange
+import string
+import os
 
-from matplotlib import pyplot as plt
-
-plt.style.use("ggplot")
-
-from wrappers import EnvPool
-
-Transition = collections.namedtuple(
-    "Transition",
-    ["state", "action", "reward", "next_state", "done"])
+from rstools.tf.optimization import build_model_optimization
+from rstools.utils.batch_utils import iterate_minibatches
+from rstools.utils.os_utils import save_history, save_model
+from rstools.visualization.plotter import plot_all_metrics
+from agent_networks import FeatureNet, PolicyNet, StateNet
+from networks import conv_network, linear_network, activations, network_wrapper
+from wrappers import EnvPool, Transition
 
 
-def chunks(l, n):
-    """Yield successive n-sized chunks from l."""
-    for i in range(0, len(l), n):
-        yield l[i:i + n]
-
-
-def create_if_need(path):
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-
-def plot_unimetric(history, metric, save_dir):
-    plt.figure()
-    plt.plot(history[metric])
-    plt.title('model {}'.format(metric))
-    plt.ylabel(metric)
-    plt.xlabel('epoch')
-    plt.savefig("{}/{}.png".format(save_dir, metric),
-                format='png', dpi=300)
-
-
-def save_stats(stats, save_dir="./"):
-    for key in stats:
-        plot_unimetric(stats, key, save_dir)
-
-
-activations = {
-    "sigmoid": tf.sigmoid,
-    "tanh": tf.tanh,
-    "relu": tf.nn.relu,
-    "relu6": tf.nn.relu6,
-    "elu": tf.nn.elu,
-    "softplus": tf.nn.softplus
-}
-
-
-def update_varlist(loss, optimizer, var_list, scope, reuse=False, grad_clip=10.0, global_step=None):
-    with tf.variable_scope(scope) as scope:
-        if reuse:
-            scope.reuse_variables()
-        gvs = optimizer.compute_gradients(loss, var_list=var_list)
-        capped_gvs = [(tf.clip_by_value(grad, -grad_clip, grad_clip), var) for grad, var in gvs]
-        update_step = optimizer.apply_gradients(capped_gvs, global_step=global_step)
-        return update_step
-
-
-class PolicyAgent(object):
+class A3CFF(object):
     def __init__(self, state_shape, n_actions, network, special=None):
         self.special = special or {}
         self.state_shape = state_shape
         self.n_actions = n_actions
 
-        self.states = tf.placeholder(shape=(None,) + state_shape, dtype=tf.float32)
-        self.actions = tf.placeholder(shape=[None], dtype=tf.int32)
-        self.cumulative_rewards = tf.placeholder(shape=[None], dtype=tf.float32)
-        self.is_training = tf.placeholder(dtype=tf.bool)
+        self.feature_net = FeatureNet(state_shape, network, special.get("feature_get", None))
+        self.hidden_state = tf.layers.dense(
+            self.feature_net.hidden_state,
+            self.special.get("hidden_size", 512),
+            activation=self.special.get("hidden_actiovation", tf.nn.elu))
+        self.policy_net = PolicyNet(self.hidden_state, n_actions, special.get("policy_net", None))
+        self.state_net = StateNet(self.hidden_state, special.get("state_net", None))
 
-        self.scope = self.special.get("scope", "network")
+        build_model_optimization(self.policy_net, special.get("policy_net_optimization", None))
+        build_model_optimization(self.state_net, special.get("state_net_optimization", None))
+        build_model_optimization(
+            self.feature_net,
+            special.get("feature_net_optimization", None),
+            loss=0.5 * (self.policy_net.loss + self.state_net.loss))
 
-        hidden_state = network(
-            self.states,
-            scope=self.scope + "_hidden",
-            reuse=self.special.get("reuse_hidden", False),
-            is_training=self.is_training)
-
-        self.predicted_probs = self._probs(
-            hidden_state,
-            scope=self.scope + "_probs",
-            reuse=self.special.get("reuse_probs", False))
-
-        one_hot_actions = tf.one_hot(self.actions, n_actions)
-        predicted_probs_for_actions = tf.reduce_sum(
-            tf.multiply(self.predicted_probs, one_hot_actions),
-            axis=-1)
-
-        J = tf.reduce_mean(tf.log(predicted_probs_for_actions) * self.cumulative_rewards)
-        self.loss = -J
-
-        # a bit of regularization
-        if self.special.get("entropy_loss", True):
-            H = tf.reduce_mean(
-                tf.reduce_sum(
-                    self.predicted_probs * tf.log(self.predicted_probs),
-                    axis=-1))
-            self.loss += H * self.special.get("entropy_koef", 0.1)
-
-        optimizer = tf.train.AdamOptimizer(self.special.get("policy_lr", 1e-4))
-        self.hidden_state_update = update_varlist(
-            self.loss, optimizer,
-            var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
-                                       scope=self.scope + "_hidden"),
-            scope=self.scope + "_hidden",
-            reuse=self.special.get("reuse_hidden", False))
-
-        self.probs_update = update_varlist(
-            self.loss, optimizer,
-            var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
-                                       scope=self.scope + "_probs"),
-            scope=self.scope + "_probs",
-            reuse=self.special.get("reuse_probs", False))
-
-    def _probs(self, hidden_state, scope, reuse=False):
-        with tf.variable_scope(scope) as scope:
-            if reuse:
-                scope.reuse_variables()
-            probs = tflayers.fully_connected(
-                hidden_state,
-                num_outputs=self.n_actions,
-                activation_fn=tf.nn.softmax)
-            return probs
-
-    def predict(self, sess, state_batch, is_training=False):
+    def predict_value(self, sess, state_batch):
         return sess.run(
-            self.predicted_probs,
+            self.state_net.predicted_values,
             feed_dict={
-                self.states: state_batch,
-                self.is_training: is_training})
+                self.feature_net.states: state_batch,
+                self.feature_net.is_training: False
+            })
 
-    def update(self, sess, state_batch, action_batch, rewards_batch, is_training=True):
-        loss, _, _ = sess.run(
-            [self.loss, self.hidden_state_update, self.probs_update],
-            feed_dict={
-                self.states: state_batch,
-                self.actions: action_batch,
-                self.cumulative_rewards: rewards_batch,
-                self.is_training: is_training})
-        return loss
-
-
-class ValueAgent(object):
-    def __init__(self, state_shape, n_actions, network, special=None):
-        self.special = special or {}
-        self.state_shape = state_shape
-        self.n_actions = n_actions
-
-        self.states = tf.placeholder(shape=(None,) + state_shape, dtype=tf.float32)
-        self.td_targets = tf.placeholder(shape=[None], dtype=tf.float32)
-
-        self.is_training = tf.placeholder(dtype=tf.bool)
-
-        self.scope = self.special.get("scope", "network")
-
-        hidden_state = network(
-            self.states,
-            scope=self.scope + "_hidden",
-            reuse=self.special.get("reuse_hidden", False),
-            is_training=self.is_training)
-
-        self.predicted_values = tf.squeeze(
-            self._state_value(
-                hidden_state,
-                scope=self.scope + "_state_value",
-                reuse=self.special.get("reuse_state_value", False)))
-
-        # self.loss = tf.reduce_mean(
-        #     tf.square(self.td_targets - self.predicted_values))
-
-        self.loss = tf.losses.mean_squared_error(
-            labels=self.td_targets,
-            predictions=self.predicted_values)
-
-        optimizer = tf.train.AdamOptimizer(self.special.get("value_lr", 1e-4))
-        self.hidden_state_update = update_varlist(
-            self.loss, optimizer,
-            var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
-                                       scope=self.scope + "_hidden"),
-            scope=self.scope + "_hidden",
-            reuse=self.special.get("reuse_hidden", False))
-
-        self.state_value_update = update_varlist(
-            self.loss, optimizer,
-            var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
-                                       scope=self.scope + "_state_value"),
-            scope=self.scope + "_state_value",
-            reuse=self.special.get("reuse_state_value", False))
-
-    def _state_value(self, hidden_state, scope, reuse=False):
-        with tf.variable_scope(scope) as scope:
-            if reuse:
-                scope.reuse_variables()
-            qvalues = tflayers.fully_connected(
-                hidden_state,
-                num_outputs=1,
-                activation_fn=None)
-            return qvalues
-
-    def predict(self, sess, state_batch, is_training=False):
+    def predict_action(self, sess, state_batch):
         return sess.run(
-            self.predicted_values,
+            self.policy_net.predicted_probs,
             feed_dict={
-                self.states: state_batch,
-                self.is_training: is_training})
-
-    def update(self, sess, state_batch, td_target_batch, is_training=True):
-        loss, _, _ = sess.run(
-            [self.loss, self.hidden_state_update, self.state_value_update],
-            feed_dict={
-                self.states: state_batch,
-                self.td_targets: td_target_batch,
-                self.is_training: is_training})
-        return loss
+                self.feature_net.states: state_batch,
+                self.feature_net.is_training: False
+            })
 
 
-class AACAgent(object):
-    def __init__(self, state_shape, n_actions, network, special=None):
-        self.special = special or {}
-        self.state_shape = state_shape
-        self.n_actions = n_actions
-
-        self.policy_net = PolicyAgent(state_shape, n_actions, network, special)
-        special["reuse_hidden"] = True
-        self.value_net = ValueAgent(state_shape, n_actions, network, special)
-
-
-def action(agent, sess, state):
-    probs = agent.policy_net.predict(sess, state)
+def action(sess, agent, state):
+    probs = agent.predict_action(sess, state)
     actions = [np.random.choice(np.arange(len(row)), p=row) for row in probs]
     return actions
 
@@ -280,10 +99,10 @@ def update(sess, aac_agent, transitions, discount_factor=0.99, batch_size=32, ti
         axis_len = state_axis.shape[0]
         axis_value_loss, axis_policy_loss = 0.0, 0.0
 
-        state_axis = chunks(state_axis, batch_size)
-        action_axis = chunks(action_axis, batch_size)
-        value_target_axis = chunks(value_target_axis, batch_size)
-        policy_target_axis = chunks(policy_target_axis, batch_size)
+        state_axis = iterate_minibatches(state_axis, batch_size, shuffle=False)
+        action_axis = iterate_minibatches(action_axis, batch_size, shuffle=False)
+        value_target_axis = iterate_minibatches(value_target_axis, batch_size, shuffle=False)
+        policy_target_axis = iterate_minibatches(policy_target_axis, batch_size, shuffle=False)
 
         for state_batch, action_batch, value_target, policy_target in \
                 zip(state_axis, action_axis, value_target_axis, policy_target_axis):
@@ -394,33 +213,8 @@ def actor_critic_learning(
     return history
 
 
-def linear_network(states, scope=None, reuse=False, is_training=False, layers=None,
-                   activation_fn=tf.nn.elu):
-    layers = layers or [16, 16]
-    with tf.variable_scope(scope or "network") as scope:
-        if reuse:
-            scope.reuse_variables()
-
-        hidden_state = tflayers.stack(
-            states,
-            tflayers.fully_connected,
-            layers,
-            activation_fn=activation_fn,
-            normalizer_fn=tflayers.batch_norm,
-            normalizer_params={"is_training": is_training})
-
-        return hidden_state
-
-
-def network_wrapper(layers=None, activation_fn=tf.nn.elu):
-    def wrapper(states, scope=None, reuse=False, is_training=False):
-        return linear_network(states, scope, reuse, is_training, layers, activation_fn)
-
-    return wrapper
-
-
 def _parse_args():
-    parser = argparse.ArgumentParser(description='Policy iteration example')
+    parser = argparse.ArgumentParser(description='FeedForward A3C Agent')
     parser.add_argument(
         '--env',
         type=str,
@@ -504,7 +298,7 @@ def run(env, q_learning_args, update_args, agent_agrs,
 
     network = agent_agrs["network"] or linear_network
 
-    q_net = AACAgent(
+    q_net = A3CFF(
         state_shape, n_actions, network,
         special=agent_agrs)
 
@@ -520,27 +314,27 @@ def run(env, q_learning_args, update_args, agent_agrs,
             saver.restore(sess, "{}/model.ckpt".format(model_dir))
 
         try:
-            stats = actor_critic_learning(
+            history = actor_critic_learning(
                 sess, q_net, env,
                 update_fn=update_wraper(**update_args),
                 **q_learning_args)
         except KeyboardInterrupt:
             print("Exiting training procedure")
-        create_if_need(model_dir)
-        saver.save(sess, "{}/model.ckpt".format(model_dir))
+        save_model(sess, saver, model_dir)
 
         if plot_stats:
-            stats_dir = os.path.join(model_dir, "stats")
-            create_if_need(stats_dir)
-            save_stats(stats, save_dir=stats_dir)
+            save_history(history, model_dir)
+            plotter_dir = os.path.join(model_dir, "plotter")
+            plot_all_metrics(history, save_dir=plotter_dir)
 
         if api_key is not None:
             env = gym.make(env_name)
-            env = gym.wrappers.Monitor(env, "{}/monitor".format(model_dir), force=True)
+            monitor_dir = os.path.join(model_dir, "monitor")
+            env = gym.wrappers.Monitor(env, monitor_dir, force=True)
             sessions = [generate_session(sess, q_net, env, int(1e10), update_fn=None)
                         for _ in range(300)]
             env.close()
-            gym.upload("{}/monitor".format(model_dir), api_key=api_key)
+            gym.upload(monitor_dir, api_key=api_key)
 
 
 def main():

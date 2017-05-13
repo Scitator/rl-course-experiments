@@ -1,5 +1,4 @@
 import tensorflow as tf
-import tensorflow.contrib.layers as tflayers
 
 
 class FeatureNet(object):
@@ -44,12 +43,14 @@ class PolicyNet(object):
             scope=self.scope + "/probs",
             reuse=self.special.get("reuse_probs", False))
 
-        one_hot_actions = tf.one_hot(self.actions, n_actions)
-        predicted_probs_for_actions = tf.reduce_sum(
-            tf.multiply(self.predicted_probs, one_hot_actions),
-            axis=-1)
+        self.predicted_probs_for_actions = tf.gather(
+            self.predicted_probs, self.actions)
+        # one_hot_actions = tf.one_hot(self.actions, n_actions)
+        # predicted_probs_for_actions = tf.reduce_sum(
+        #     tf.multiply(self.predicted_probs, one_hot_actions),
+        #     axis=-1)
 
-        J = tf.reduce_mean(tf.log(predicted_probs_for_actions) * self.cumulative_rewards)
+        J = tf.reduce_mean(tf.log(self.predicted_probs_for_actions) * self.cumulative_rewards)
         self.loss = -J
 
         # a bit of regularization
@@ -62,14 +63,14 @@ class PolicyNet(object):
 
     def _probs(self, hidden_state, scope, reuse=False):
         with tf.variable_scope(scope, reuse=reuse):
-            probs = tflayers.fully_connected(
+            probs = tf.layers.dense(
                 hidden_state,
-                num_outputs=self.n_actions,
-                activation_fn=tf.nn.softmax)
+                units=self.n_actions,
+                activation=tf.nn.softmax)
             return probs
 
 
-class StateValueNet(object):
+class StateNet(object):
     def __init__(self, hidden_state, special=None):
         self.special = special or {}
 
@@ -95,10 +96,10 @@ class StateValueNet(object):
 
     def _state_value(self, hidden_state, scope, reuse=False):
         with tf.variable_scope(scope, reuse=reuse):
-            qvalues = tflayers.fully_connected(
+            qvalues = tf.layers.dense(
                 hidden_state,
-                num_outputs=1,
-                activation_fn=None)
+                units=1,
+                activation=None)
             return qvalues
 
 
@@ -122,10 +123,12 @@ class QvalueNet(object):
             scope=self.scope + "/qvalue",
             reuse=self.special.get("reuse_state_value", False))
 
-        one_hot_actions = tf.one_hot(self.actions, n_actions)
-        self.predicted_qvalues_for_actions = tf.reduce_sum(
-            tf.multiply(self.predicted_qvalues, one_hot_actions),
-            axis=-1)
+        self.predicted_qvalues_for_actions = tf.gather(
+            self.predicted_qvalues, self.actions)
+        # one_hot_actions = tf.one_hot(self.actions, n_actions)
+        # self.predicted_qvalues_for_actions = tf.reduce_sum(
+        #     tf.multiply(self.predicted_qvalues, one_hot_actions),
+        #     axis=-1)
 
         self.loss = tf.losses.mean_squared_error(
             labels=self.td_target,
@@ -133,10 +136,11 @@ class QvalueNet(object):
 
     def _qvalues(self, hidden_state, scope, reuse=False):
         with tf.variable_scope(scope, reuse=reuse):
-            qvalues = tflayers.fully_connected(
+            qvalues = tf.layers.dense(
                 hidden_state,
-                num_outputs=self.n_actions,
-                activation_fn=None)
+                units=self.n_actions,
+                activation=None)
             if self.special.get("advantage", False):
                 qvalues -= tf.reduce_mean(qvalues, axis=-1, keep_dims=True)
             return qvalues
+

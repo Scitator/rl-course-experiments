@@ -1,11 +1,14 @@
-
-"""basic wrappers, useful for reinforcement learning on gym envs"""
-
 import numpy as np
 from scipy.misc import imresize
-from gym.core import ObservationWrapper,Wrapper
+from gym.core import ObservationWrapper, Wrapper
 from gym.spaces.box import Box
 from copy import copy
+import collections
+
+
+Transition = collections.namedtuple(
+    "Transition",
+    ["state", "action", "reward", "next_state", "done"])
 
 
 class PreprocessImage(ObservationWrapper):
@@ -28,7 +31,6 @@ class PreprocessImage(ObservationWrapper):
         img = imresize(img, self.img_size)
         if self.grayscale:
             img = img.mean(-1, keepdims=True)
-        # img = np.transpose(img, (2, 0, 1))  # reshape from (h,w,colors) to (colors,h,w)
         img = img.astype('float32') / 255.
         return img
 

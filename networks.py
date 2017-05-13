@@ -1,6 +1,16 @@
 import tensorflow as tf
 
 
+activations = {
+    "sigmoid": tf.sigmoid,
+    "tanh": tf.tanh,
+    "relu": tf.nn.relu,
+    "relu6": tf.nn.relu6,
+    "elu": tf.nn.elu,
+    "softplus": tf.nn.softplus
+}
+
+
 def linear_network(
         states, is_training=False, scope=None, reuse=False,
         layers=None, activation_fn=tf.nn.elu, use_bn=False, dropout=-1):
@@ -12,7 +22,7 @@ def linear_network(
             if use_bn:
                 x = tf.layers.batch_normalization(x, training=is_training)
             x = activation_fn(x)
-            if dropout > 0.0:
+            if dropout > 0:
                 x = tf.layers.dropout(x, rate=dropout, training=is_training)
         return x
 
@@ -31,7 +41,7 @@ def conv_network(
             if use_bn:
                 x = tf.layers.batch_normalization(x, training=is_training)
             x = activation_fn(x)
-            if dropout > 0.0:
+            if dropout > 0:
                 x = tf.layers.dropout(x, rate=dropout, training=is_training)
         return x
 
