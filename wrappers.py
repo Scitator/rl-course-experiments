@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.misc import imresize
+import gym
 from gym.core import ObservationWrapper, Wrapper
 from gym.spaces.box import Box
 from copy import copy
@@ -109,3 +110,35 @@ class EnvPool(Wrapper):
             return self.reset()
         else:
             return self.envs_states
+
+
+def make_image_env(
+        env, n_games=1, width=64, height=64,
+        grayscale=True, crop=lambda img: img[60:-30, 7:]):
+    if n_games > 1:
+        return EnvPool(
+            PreprocessImage(
+                env,
+                width=width, height=height, grayscale=grayscale,
+                crop=crop),
+            n_games)
+    else:
+        return PreprocessImage(
+            env,
+            width=width, height=height, grayscale=grayscale,
+            crop=crop)
+
+
+def make_image_env_wrapper(params):
+    def wrapper(env, n_games):
+        return make_image_env(env, n_games, **params)
+    return wrapper
+
+
+def make_env(env, n_games=1):
+    if n_games > 1:
+        return EnvPool(
+            gym.make(env).env,
+            n_games)
+    else:
+        return gym.make(env).env

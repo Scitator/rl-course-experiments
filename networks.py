@@ -27,7 +27,7 @@ def linear_network(
         return x
 
 
-def conv_network(
+def convolution_network(
         states, is_training=False, scope=None, reuse=False,
         n_filters=None, kernels=None, strides=None,
         activation_fn=tf.nn.elu, use_bn=False, dropout=-1):
@@ -44,6 +44,12 @@ def conv_network(
             if dropout > 0:
                 x = tf.layers.dropout(x, rate=dropout, training=is_training)
         return x
+
+
+networks = {
+    "linear": linear_network,
+    "convolution": convolution_network
+}
 
 
 def network_wrapper(network, params):

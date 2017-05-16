@@ -1,3 +1,4 @@
+import numpy as np
 import tensorflow as tf
 
 
@@ -144,3 +145,8 @@ class QvalueNet(object):
                 qvalues -= tf.reduce_mean(qvalues, axis=-1, keep_dims=True)
             return qvalues
 
+
+def epsilon_greedy_policy(agent, sess, observations):
+    probs = agent.predict_action(sess, observations)
+    actions = [np.random.choice(len(row), p=row) for row in probs]
+    return actions
