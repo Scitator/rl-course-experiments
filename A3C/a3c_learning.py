@@ -71,23 +71,31 @@ def update(sess, aac_agent, transitions, initial_state=None,
 
         for state_batch, action_batch, value_target, policy_target, done_batch in \
                 zip(state_axis, action_axis, value_target_axis, policy_target_axis, done_axis):
-            batch_loss_policy, batch_loss_state, _, _, _, _ = sess.run(
-                [aac_agent.policy_net.loss,
-                 aac_agent.state_value_net.loss,
+            run_params = [
+                 aac_agent.policy_net.loss,
+                 aac_agent.state_net.loss,
                  aac_agent.policy_net.train_op,
-                 aac_agent.state_value_net.train_op,
-                 aac_agent.feature_net.train_op,
-                 aac_agent.belief_update],
-                feed_dict={
-                    aac_agent.feature_net.states: state_batch,
-                    aac_agent.feature_net.is_training: True,
-                    aac_agent.policy_net.actions: action_batch,
-                    aac_agent.policy_net.cumulative_rewards: policy_target,
-                    aac_agent.policy_net.is_training: True,
-                    aac_agent.state_value_net.td_target: value_target,
-                    aac_agent.state_value_net.is_training: True,
-                    aac_agent.is_end: done_batch
-                })
+                 aac_agent.state_net.train_op,
+                 aac_agent.feature_net.train_op]
+            feed_params = {
+                aac_agent.feature_net.states: state_batch,
+                aac_agent.feature_net.is_training: True,
+                aac_agent.policy_net.actions: action_batch,
+                aac_agent.policy_net.cumulative_rewards: policy_target,
+                aac_agent.policy_net.is_training: True,
+                aac_agent.state_net.td_target: value_target,
+                aac_agent.state_net.is_training: True
+            }
+            if isinstance(aac_agent, A3CLstmAgent):
+                run_params += [aac_agent.belief_update]
+                feed_params[aac_agent.is_end] = done_batch
+            
+            run_result = sess.run(
+                run_params,
+                feed_dict=feed_params)
+
+            batch_loss_policy = run_result[0]
+            batch_loss_state = run_result[1]
 
             axis_value_loss += batch_loss_state
             axis_policy_loss += batch_loss_policy
@@ -253,7 +261,7 @@ def _parse_args():
     parser.add_argument(
         '--agent',
         type=str,
-        choise=["feed_forward", "recurrent"])
+        choices=["feed_forward", "recurrent"])
     parser.add_argument(
         '--env',
         type=str,
@@ -292,7 +300,7 @@ def _parse_args():
     parser.add_argument(
         '--feature_network',
         type=str,
-        choise=["linear", "convolution"])
+        choices=["linear", "convolution"])
     parser.add_argument(
         '--activation',
         type=str,
@@ -473,7 +481,6 @@ def main():
         "feature_net_optimization": optimization_params,
         "state_value_net_optimiaztion": value_optimization_params,
         "policy_net_optimiaztion": policy_optimization_params,
-        "cell_activation": args.lstm_activation
     }
     image_preprocessing_params = {
         "width": args.image_width,

@@ -44,13 +44,12 @@ class PolicyNet(object):
             scope=self.scope + "/probs",
             reuse=self.special.get("reuse_probs", False))
 
-        self.predicted_probs_for_actions = tf.gather(
-            self.predicted_probs, self.actions)
-        # one_hot_actions = tf.one_hot(self.actions, n_actions)
-        # predicted_probs_for_actions = tf.reduce_sum(
-        #     tf.multiply(self.predicted_probs, one_hot_actions),
-        #     axis=-1)
+        batch_size = tf.shape(self.actions)[0]
+        predicted_ids = tf.range(batch_size) * tf.shape(self.predicted_probs)[1] + self.actions
 
+        self.predicted_probs_for_actions = tf.gather(
+            tf.reshape(self.predicted_probs, [-1]), predicted_ids)
+        
         J = tf.reduce_mean(tf.log(self.predicted_probs_for_actions) * self.cumulative_rewards)
         self.loss = -J
 
@@ -124,12 +123,11 @@ class QvalueNet(object):
             scope=self.scope + "/qvalue",
             reuse=self.special.get("reuse_state_value", False))
 
+        batch_size = tf.shape(self.actions)[0]
+        predicted_ids = tf.range(batch_size) * tf.shape(self.td_target)[1] + self.actions
+
         self.predicted_qvalues_for_actions = tf.gather(
-            self.predicted_qvalues, self.actions)
-        # one_hot_actions = tf.one_hot(self.actions, n_actions)
-        # self.predicted_qvalues_for_actions = tf.reduce_sum(
-        #     tf.multiply(self.predicted_qvalues, one_hot_actions),
-        #     axis=-1)
+            tf.reshape(self.predicted_qvalues, [-1]), predicted_ids)
 
         self.loss = tf.losses.mean_squared_error(
             labels=self.td_target,
