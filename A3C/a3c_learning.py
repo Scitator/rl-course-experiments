@@ -10,10 +10,10 @@ from rstools.utils.batch_utils import iterate_minibatches
 from rstools.utils.os_utils import save_history, save_model
 from rstools.visualization.plotter import plot_all_metrics
 
-from networks import activations, networks, network_wrapper
+from networks import activations, networks, network_wrapper, str2params
 from agent_networks import epsilon_greedy_policy
 from wrappers import Transition, make_env, make_image_env_wrapper
-from A3C.a3c_ff import  A3CFFAgent
+from A3C.a3c_ff import A3CFFAgent
 from A3C.a3c_lstm import A3CLstmAgent
 
 
@@ -107,33 +107,6 @@ def update_wraper(discount_factor=0.99, reward_norm=1.0, batch_size=32, time_maj
 
     return wrapper
 
-
-# def generate_session(
-#         sess, aac_agent, env, t_max=1000, update_fn=None):
-#     total_reward = 0
-#     total_policy_loss, total_state_loss = 0, 0
-#
-#     transitions = []
-#
-#     s = env.reset()
-#     for t in range(t_max):
-#         a = epsilon_greedy_policy(aac_agent, sess, np.array([s], dtype=np.float32))[0]
-#
-#         next_s, r, done, _ = env.step(a)
-#
-#         transitions.append(Transition(
-#             state=s, action=a, reward=r, next_state=next_s, done=done))
-#
-#         total_reward += r
-#
-#         s = next_s
-#         if done:
-#             break
-#
-#     if update_fn is not None:
-#         total_policy_loss, total_value_loss = update_fn(sess, aac_agent, transitions)
-#
-#     return total_reward, total_policy_loss, total_state_loss, t
 
 def play_session(
         sess, a3c_agent, env, t_max=1000):
@@ -333,6 +306,26 @@ def _parse_args():
         type=float,
         default=-1)
 
+    # special args for linear network
+    parser.add_argument(
+        '--layers',
+        type=str,
+        default=None)
+
+    # special args for convolution network:
+    parser.add_argument(
+        '--n_filters',
+        type=str,
+        default=None)
+    parser.add_argument(
+        '--kernels',
+        type=str,
+        default=None)
+    parser.add_argument(
+        '--strides',
+        type=str,
+        default=None)
+
     parser.add_argument(
         '--policy_lr',
         type=float,
@@ -356,7 +349,7 @@ def _parse_args():
     parser.add_argument(
         '--grad_clip',
         type=float,
-        default=10.0)
+        default=5.0)
 
     parser.add_argument(
         '--entropy_koef',
@@ -424,12 +417,26 @@ def _parse_args():
 def main():
     args = _parse_args()
 
+    if args.feature_network == "linear":
+        network_args = {
+            "layers": str2params(args.layers)
+        }
+    elif args.feature_network == "convolution":
+        network_args = {
+            "n_filters": str2params(args.n_filters),
+            "kernels": str2params(args.kernels),
+            "strides": str2params(args.strides)
+        }
+    else:
+        raise NotImplemented()
+
     network = network_wrapper(
-        networks[args.feature_network], {
+        networks[args.feature_network],
+        dict(**network_args, **{
             "activation_fn": activations[args.activation],
             "use_bn": args.use_bn,
             "dropout": args.dropout
-        })
+        }))
 
     q_learning_args = {
         "n_epochs": args.n_epochs,
