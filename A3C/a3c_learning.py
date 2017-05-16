@@ -494,3 +494,7 @@ def main():
         args.n_games,
         args.plot_history, args.api_key,
         args.load, args.gpu_option)
+
+
+if __name__ == '__main__':
+    main()
