@@ -133,7 +133,10 @@ def play_session(
             state=s, action=a, reward=r, next_state=next_s, done=done))
 
         total_reward += r
-        a3c_agent.update_belief_state(sess, [s], [done])
+
+        if isinstance(a3c_agent, A3CLstmAgent):
+            a3c_agent.update_belief_state(sess, [s], [done])
+ 
         s = next_s
         if done:
             break
@@ -158,6 +161,10 @@ def generate_sessions(sess, a3c_agent, env_pool, t_max=1000, update_fn=None):
 
         transitions.append(Transition(
             state=states, action=actions, reward=rewards, next_state=next_states, done=dones))
+
+        if isinstance(a3c_agent, A3CLstmAgent):
+            a3c_agent.update_belief_state(sess, states, dones)
+
         states = next_states
 
         total_reward += rewards.mean()
@@ -339,7 +346,7 @@ def _parse_args():
         type=float,
         default=1e-4)
     parser.add_argument(
-        '--value_lr',
+        '--state_lr',
         type=float,
         default=1e-4)
     parser.add_argument(
@@ -467,9 +474,9 @@ def main():
         **optimization_params,
         **{"initial_lr": args.policy_lr}
     }
-    value_optimization_params = {
+    state_optimization_params = {
         **optimization_params,
-        **{"initial_lr": args.policy_lr}
+        **{"initial_lr": args.state_lr}
     }
     policy_net_params = {
         "entropy_koef": args.entropy_koef
@@ -479,7 +486,7 @@ def main():
         "network": network,
         "policy_net": policy_net_params,
         "feature_net_optimization": optimization_params,
-        "state_value_net_optimiaztion": value_optimization_params,
+        "state_net_optimiaztion": state_optimization_params,
         "policy_net_optimiaztion": policy_optimization_params,
     }
     image_preprocessing_params = {
