@@ -13,7 +13,8 @@ class DqnAgent(object):
         self.n_actions = n_actions
         self.special = special
 
-        self.scope = special.get("scope", "dqn")
+        self.scope = tf.get_variable_scope().name + "/" + special.get("scope", "dqn") \
+            if tf.get_variable_scope().name else special.get("scope", "dqn")
 
         with tf.variable_scope(self.scope):
             self._build_graph(network)
@@ -28,7 +29,7 @@ class DqnAgent(object):
             self.special.get("hidden_size", 512),
             self.special.get("hidden_activation", tf.nn.elu))
 
-        if self.special("double_network", False):
+        if self.special.get("double_network", False):
             self.qvalue_net = QvalueNet(
                 self.hidden_state.state, self.n_actions,
                 dict(**self.special.get("qvalue_net", {}), **{"advantage": True}))

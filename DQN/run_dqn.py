@@ -105,9 +105,10 @@ def dqn_learning(sess, agent, env, update_fn, n_epochs=1000, n_sessions=100, t_m
 def run(env_name, make_env_fn, agent_cls,
         run_args, update_args, agent_agrs,
         plot_stats=False, api_key=None,
-        load=False, gpu_option=0.4):
+        load=False, gpu_option=0.4,
+        n_games=10):
     run_wrapper(
-        1, dqn_learning, update_wraper(update, **update_args), play_session,
+        n_games, dqn_learning, update_wraper(update, **update_args), play_session,
         env_name, make_env_fn, agent_cls,
         run_args, agent_agrs,
         plot_stats, api_key,
@@ -148,7 +149,7 @@ def _parse_args():
         action='store_true',
         default=False)
 
-    args = parser.parse_known_args()
+    args = parser.parse_args()
     return args
 
 
@@ -159,12 +160,12 @@ def main():
 
     qvalue_optimization_params = {
         **optimization_params,
-        **{"initial_lr": args.policy_lr}
+        **{"initial_lr": args.qvalue_lr}
     }
 
     value_optimization_params = {
         **optimization_params,
-        **{"initial_lr": args.policy_lr}
+        **{"initial_lr": args.value_lr}
     }
 
     agent_args = {
@@ -175,7 +176,7 @@ def main():
         "qvalue_net_optimiaztion": qvalue_optimization_params,
     }
 
-    agent_cls = DqnAgent if args.agent_type == "dqn" else DqrnAgent
+    agent_cls = DqnAgent if args.agent == "dqn" else DqrnAgent
 
     run(args.env, make_env_fn, agent_cls,
         run_args, update_args, agent_args,

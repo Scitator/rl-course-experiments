@@ -16,11 +16,12 @@ class FeatureNet(object):
         self.optimizer = None
         self.train_op = None
 
-        self.scope = self.special.get("scope", "feature_network")
+        self.relative_scope = self.special.get("scope", "feature_network")
+        self.scope = tf.get_variable_scope().name + "/" + self.relative_scope 
 
         self.feature_state = network(
             self.states,
-            scope=self.scope + "/feature",
+            scope=self.relative_scope + "/feature",
             reuse=self.special.get("reuse_feature", False),
             is_training=self.is_training)
 
@@ -38,11 +39,12 @@ class PolicyNet(object):
         self.optimizer = None
         self.train_op = None
 
-        self.scope = self.special.get("scope", "policy_network")
+        self.relative_scope = self.special.get("scope", "policy_network")
+        self.scope = tf.get_variable_scope().name + "/" + self.relative_scope 
 
         self.predicted_probs = self._probs(
             hidden_state,
-            scope=self.scope + "/probs",
+            scope=self.relative_scope + "/probs",
             reuse=self.special.get("reuse_probs", False))
 
         batch_size = tf.shape(self.actions)[0]
@@ -82,12 +84,13 @@ class ValueNet(object):
         self.optimizer = None
         self.train_op = None
 
-        self.scope = self.special.get("scope", "value_network")
+        self.relative_scope = self.special.get("scope", "value_network")
+        self.scope = tf.get_variable_scope().name + "/" + self.relative_scope
 
         self.predicted_values = tf.squeeze(
             self._state_value(
                 hidden_state,
-                scope=self.scope + "/state_value",
+                scope=self.relative_scope + "/state_value",
                 reuse=self.special.get("reuse_state_value", False)),
             axis=1)
 
@@ -117,15 +120,16 @@ class QvalueNet(object):
         self.optimizer = None
         self.train_op = None
 
-        self.scope = self.special.get("scope", "qvalue_network")
+        self.relative_scope = self.special.get("scope", "qvalue_network")
+        self.scope = tf.get_variable_scope().name + "/" + self.relative_scope 
 
         self.predicted_qvalues = self._qvalues(
             hidden_state,
-            scope=self.scope + "/qvalue",
+            scope=self.relative_scope + "/qvalue",
             reuse=self.special.get("reuse_state_value", False))
 
         batch_size = tf.shape(self.actions)[0]
-        predicted_ids = tf.range(batch_size) * tf.shape(self.td_target)[1] + self.actions
+        predicted_ids = tf.range(batch_size) * tf.shape(self.predicted_qvalues)[1] + self.actions
 
         self.predicted_qvalues_for_actions = tf.gather(
             tf.reshape(self.predicted_qvalues, [-1]), predicted_ids)

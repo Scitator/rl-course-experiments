@@ -240,6 +240,8 @@ def typical_args(parser):
         type=int,
         default=None)
 
+    return parser
+
 
 def typical_argsparse(args):
     if args.feature_network == "linear":

@@ -64,13 +64,18 @@ def get_state_update_op(state_variables, new_states, mask=None):
 
 class LinearHiddenState(object):
     def __init__(self, feature_state, size=512, activation=None):
+
+        self.is_training = tf.placeholder(dtype=tf.bool, name="is_training")
+        self.global_step = tf.Variable(0, name='global_step', trainable=False)
+
         self.loss = None
         self.optimizer = None
         self.train_op = None
 
-        self.scope = "hidden_state"
+        self.relative_scope = "hidden_state"
+        self.scope = tf.get_variable_scope().name + "/" + self.relative_scope
 
-        with tf.variable_scope(self.scope):
+        with tf.variable_scope(self.relative_scope):
             self.state = tf.layers.dense(
                 feature_state,
                 size,
@@ -82,14 +87,18 @@ class RecurrentHiddenState(object):
     def __init__(self, feature_state, cell):
         self.is_end = tf.placeholder(shape=[None], dtype=tf.bool, name="is_end")
 
+        self.is_training = tf.placeholder(dtype=tf.bool, name="is_training")
+        self.global_step = tf.Variable(0, name='global_step', trainable=False)
+
         self.loss = None
         self.optimizer = None
         self.train_op = None
 
-        self.scope = "hidden_state"
+        self.relative_scope = "hidden_state"
+        self.scope = tf.get_variable_scope().name + "/" + self.relative_scope
         batch_size = tf.unstack(tf.shape(feature_state))[0]
 
-        with tf.variable_scope(self.scope):
+        with tf.variable_scope(self.relative_scope):
             self.belief_state = get_state_variables(batch_size, cell)
             # very bad dark magic, need to refactor all of this
             # supports only ine layer cell
