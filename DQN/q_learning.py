@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 
 import gym
-from gym import wrappers
 import os
 import string
 import argparse
@@ -11,141 +10,9 @@ import tensorflow.contrib.layers as tflayers
 from tqdm import trange
 import collections
 
-from matplotlib import pyplot as plt
+from rstools.tf.optimization import build_model_optimization
+from agent_networks import FeatureNet, QvalueNet
 
-plt.style.use("ggplot")
-
-
-def create_if_need(path):
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-
-def plot_unimetric(history, metric, save_dir):
-    plt.figure()
-    plt.plot(history[metric])
-    plt.title('model {}'.format(metric))
-    plt.ylabel(metric)
-    plt.xlabel('epoch')
-    plt.savefig("{}/{}.png".format(save_dir, metric),
-                format='png', dpi=300)
-
-
-def save_stats(stats, save_dir="./"):
-    for key in stats:
-        plot_unimetric(stats, key, save_dir)
-
-
-activations = {
-    "sigmoid": tf.sigmoid,
-    "tanh": tf.tanh,
-    "relu": tf.nn.relu,
-    "relu6": tf.nn.relu6,
-    "elu": tf.nn.elu,
-    "softplus": tf.nn.softplus
-}
-
-
-class DqnAgent(object):
-    def __init__(self, state_shape, n_actions, network, gamma=0.99, special=None):
-        self.special = special or {}
-        self.state_shape = state_shape
-        self.n_actions = n_actions
-        self.buffer = collections.deque(maxlen=self.special.get("buffer_len", 10000))
-        self.batch_size = self.special.get("batch_size", 32)
-
-        self.current_states = tf.placeholder(shape=(None,) + state_shape, dtype=tf.float32)
-        self.actions = tf.placeholder(shape=[None], dtype=tf.int32)
-        self.rewards = tf.placeholder(shape=[None], dtype=tf.float32)
-        self.next_states = tf.placeholder(shape=(None,) + state_shape, dtype=tf.float32)
-        self.is_end = tf.placeholder(shape=[None], dtype=tf.bool)
-
-        scope = self.special.get("scope", "network")
-
-        self.predicted_qvalues = self.qnetwork(network, self.current_states, scope=scope)
-
-        one_hot_actions = tf.one_hot(self.actions, n_actions)
-        predicted_qvalues_for_actions = tf.reduce_sum(
-            tf.multiply(self.predicted_qvalues, one_hot_actions),
-            axis=-1)
-        predicted_next_qvalues = self.qnetwork(network, self.next_states, scope=scope, reuse=True)
-
-        target_qvalues_for_actions = self.rewards + \
-                                     gamma * tf.reduce_max(predicted_next_qvalues, axis=-1)
-        target_qvalues_for_actions = tf.where(
-            self.is_end,
-            tf.zeros_like(target_qvalues_for_actions),  # self.rewards
-            target_qvalues_for_actions)
-
-        self.loss = tf.reduce_mean(
-            tf.square(target_qvalues_for_actions - predicted_qvalues_for_actions))
-
-        self.update_step = tf.train.AdamOptimizer(self.special.get("lr", 1e-4)).minimize(
-            self.loss, var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope))
-
-    def qnetwork(self, network, state, scope, reuse=False):
-        hidden_state = network(state, scope=scope + "_hidden", reuse=reuse)
-        qvalues = self._to_qvalues(hidden_state, scope=scope + "_qvalues", reuse=reuse)
-        return qvalues
-
-    def _to_qvalues(self, hidden_state, scope, reuse=False):
-        with tf.variable_scope(scope) as scope:
-            if reuse:
-                scope.reuse_variables()
-
-            qvalues = tflayers.fully_connected(
-                hidden_state,
-                num_outputs=self.n_actions,
-                activation_fn=None)
-            return qvalues
-
-    def train_on_batch(self, sess, batch):
-        state_batch = np.vstack(batch[:, 0])
-        action_batch = np.vstack(batch[:, 1]).reshape(-1)
-        reward_batch = np.vstack(batch[:, 2]).reshape(-1)
-        next_state_batch = np.vstack(batch[:, 3])
-        done_batch = np.vstack(batch[:, 4]).reshape(-1)
-
-        loss, _ = sess.run(
-            [self.loss, self.update_step],
-            feed_dict={
-                self.current_states: state_batch,
-                self.actions: action_batch,
-                self.rewards: reward_batch,
-                self.next_states: next_state_batch,
-                self.is_end: done_batch})
-
-        return loss
-
-    def observe(self, sess, state, action, reward, next_state, done):
-        self.buffer.append(
-            (state, action, reward, next_state, done))
-
-        if len(self.buffer) > self.batch_size:
-            batch_ids = np.random.choice(len(self.buffer), self.batch_size)
-            batch = np.array([self.buffer[i] for i in batch_ids])
-            return self.train_on_batch(sess, batch)
-
-        return 0.0
-
-    def _action(self, sess, state):
-        qvalues = sess.run(
-            self.predicted_qvalues,
-            feed_dict={
-                self.current_states: state})[0]
-        action = np.argmax(qvalues)
-        return action
-
-    def _e_greedy_action(self, sess, state, epsilon=0.0):
-        action = None
-        if np.random.rand() < epsilon:
-            action = np.random.choice(self.n_actions)
-        else:
-            action = self._action(sess, state)
-        return action
-
-    def action(self, sess, state, epsilon=0.0):
-        return self._e_greedy_action(sess, state, epsilon)
 
 
 def generate_session(sess, agent, env, epsilon=0.5, t_max=1000):

@@ -61,55 +61,6 @@ def mutation(env, policy, p=0.1):
     return crossover(env, get_random_policy(env), policy, p)
 
 
-def _parse_args():
-    parser = argparse.ArgumentParser(description='Policy iteration example')
-    parser.add_argument(
-        '--env',
-        type=str,
-        default='FrozenLake8x8-v0',
-        help='The environment to use')
-    parser.add_argument(
-        '--num_episodes',
-        type=int,
-        default=200,
-        help='Number of episodes')
-    parser.add_argument(
-        '--max_steps',
-        type=int,
-        default=200,
-        help='Max number per episode')
-    parser.add_argument(
-        '--pool_size',
-        type=int,
-        default=200,
-        help='Population size')
-    parser.add_argument(
-        '--n_crossovers',
-        type=int,
-        default=100,
-        help='Number of crossovers per episode')
-    parser.add_argument(
-        '--n_mutations',
-        type=int,
-        default=100,
-        help='Number of mutations per episode')
-    parser.add_argument(
-        '--seed',
-        type=int,
-        default=42)
-    parser.add_argument(
-        '--verbose',
-        action='store_true',
-        default=False)
-    parser.add_argument(
-        '--api_key',
-        type=str,
-        default=None)
-
-    args, _ = parser.parse_known_args()
-    return args
-
-
 def run(env, n_episodes, max_steps,
         pool_size, n_crossovers, n_mutations,
         seed=42, verbose=False, api_key=None):
@@ -117,7 +68,7 @@ def run(env, n_episodes, max_steps,
     np.random.seed(seed)
 
     env_name = env
-    env = gym.make(env)
+    env = gym.make(env).env
     env.reset()
 
     if api_key is not None:
@@ -170,6 +121,55 @@ def run(env, n_episodes, max_steps,
     if api_key is not None:
         env.close()
         gym.upload("/tmp/" + env_name, api_key=api_key)
+
+
+def _parse_args():
+    parser = argparse.ArgumentParser(description='Policy iteration example')
+    parser.add_argument(
+        '--env',
+        type=str,
+        default='FrozenLake8x8-v0',
+        help='The environment to use')
+    parser.add_argument(
+        '--num_episodes',
+        type=int,
+        default=200,
+        help='Number of episodes')
+    parser.add_argument(
+        '--max_steps',
+        type=int,
+        default=200,
+        help='Max number per episode')
+    parser.add_argument(
+        '--pool_size',
+        type=int,
+        default=200,
+        help='Population size')
+    parser.add_argument(
+        '--n_crossovers',
+        type=int,
+        default=100,
+        help='Number of crossovers per episode')
+    parser.add_argument(
+        '--n_mutations',
+        type=int,
+        default=100,
+        help='Number of mutations per episode')
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=42)
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        default=False)
+    parser.add_argument(
+        '--api_key',
+        type=str,
+        default=None)
+
+    args, _ = parser.parse_known_args()
+    return args
 
 
 def main():

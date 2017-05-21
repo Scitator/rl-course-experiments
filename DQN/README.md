@@ -36,14 +36,3 @@
 
 - [Tensorflow](http://www.tensorflow.org)
 - [Deep Learning Books](http://www.deeplearningbook.org/)
-
-### Exercises
-
-- [OpenAI Gym Atari Environment Playground](Breakout Playground.ipynb)
-- Deep-Q Learning for Atari Games
-  - [Exercise](Deep Q Learning.ipynb)
-  - [Solution](Deep Q Learning Solution.ipynb)
-- Double-Q Learning
-  - This is a minimal change to Q-Learning so use the same exercise as above
-  - [Solution](Double DQN Solution.ipynb)
-- Prioritized Experience Replay (WIP)

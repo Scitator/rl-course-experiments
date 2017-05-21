@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+from tensorflow.contrib import rnn
 
 
 class FeatureNet(object):
@@ -17,10 +18,10 @@ class FeatureNet(object):
 
         self.scope = self.special.get("scope", "feature_network")
 
-        self.hidden_state = network(
+        self.feature_state = network(
             self.states,
-            scope=self.scope + "/hidden",
-            reuse=self.special.get("reuse_hidden", False),
+            scope=self.scope + "/feature",
+            reuse=self.special.get("reuse_feature", False),
             is_training=self.is_training)
 
 
@@ -70,7 +71,7 @@ class PolicyNet(object):
             return probs
 
 
-class StateNet(object):
+class ValueNet(object):
     def __init__(self, hidden_state, special=None):
         self.special = special or {}
 
@@ -81,7 +82,7 @@ class StateNet(object):
         self.optimizer = None
         self.train_op = None
 
-        self.scope = self.special.get("scope", "state_network")
+        self.scope = self.special.get("scope", "value_network")
 
         self.predicted_values = tf.squeeze(
             self._state_value(
@@ -144,7 +145,23 @@ class QvalueNet(object):
             return qvalues
 
 
-def epsilon_greedy_policy(agent, sess, observations):
-    probs = agent.predict_action(sess, observations)
-    actions = [np.random.choice(len(row), p=row) for row in probs]
-    return actions
+def copy_model_parameters(sess, net1, net2):
+    """
+    Copies the model parameters of one net to another.
+
+    Args:
+      sess: Tensorflow session instance
+      net1: net to copy the parameters from
+      net2: net to copy the parameters to
+    """
+    net1_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=net1.scope)
+    net1_params = sorted(net1_params, key=lambda v: v.name)
+    net2_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=net2.scope)
+    net2_params = sorted(net2_params, key=lambda v: v.name)
+
+    update_ops = []
+    for net1_v, net2_v in zip(net1_params, net2_params):
+        op = net2_v.assign(net1_v)
+        update_ops.append(op)
+
+    sess.run(update_ops)
