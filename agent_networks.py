@@ -52,7 +52,7 @@ class PolicyNet(object):
             tf.reshape(self.predicted_probs, [-1]), predicted_ids)
         
         J = tf.reduce_mean(tf.log(self.predicted_probs_for_actions) * self.cumulative_rewards)
-        self.loss = -J
+        self.loss = -J # * self.special.get("reward_koef", 1.0)
 
         # a bit of regularization
         if self.special.get("entropy_loss", True):
