@@ -184,6 +184,16 @@ def typical_args(parser):
         type=str,
         default=None)
 
+    # typical hidden state params
+    parser.add_argument(
+        '--hidden_size',
+        type=int,
+        default=512)
+    parser.add_argument(
+        '--hidden_activation',
+        type=str,
+        default="elu")
+
     # typical optimization params
     parser.add_argument(
         '--feature_lr',

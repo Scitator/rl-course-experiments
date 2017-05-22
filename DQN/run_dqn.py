@@ -16,6 +16,7 @@ from DQN.dqrn import DqrnAgent
 def update(sess, agent, transitions, init_state=None,
            discount_factor=0.99, reward_norm=1.0, batch_size=32, time_major=False):
     loss = 0.0
+    time_len = transitions.state.shape[0]
 
     transitions_it = zip(
             iterate_minibatches(transitions.state, batch_size),
@@ -41,7 +42,7 @@ def update(sess, agent, transitions, init_state=None,
                 agent.qvalue_net.is_training: True,
             })
         loss += batch_loss
-    return loss
+    return loss / time_len
 
 
 # @TODO: rewrite for DqrnAgent too
@@ -171,6 +172,8 @@ def main():
 
     agent_args = {
         "network": network,
+        "hidden_size": args.hidden_size,
+        "hidden_activation": args.hidden_activation,
         "feature_net_optimization": optimization_params,
         "hidden_state_optimization": optimization_params,
         "value_net_optimiaztion": value_optimization_params,
