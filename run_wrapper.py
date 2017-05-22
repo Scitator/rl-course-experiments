@@ -18,12 +18,23 @@ def epsilon_greedy_policy(agent, sess, observations):
     return actions
 
 
-def play_session(sess, agent, env, t_max=int(1e10)):
+# @TODO: rewrite more numpy way (no for usage)
+def epsilon_greedy_actions(agent, sess, observations, epsilon=0.01):
+    qvalues = agent.predict_qvalues(sess, observations)
+    probs = np.ones_like(qvalues, dtype=float) * epsilon / agent.qvalue_net.n_actions
+    best_action = np.argmax(qvalues, axis=-1)
+    for i, action in enumerate(best_action):
+        probs[i, action] += (1.0 - epsilon)
+    actions = [np.random.choice(len(row), p=row) for row in probs]
+    return actions
+
+
+def play_session(sess, agent, env, t_max=int(1e10), action_fn=None):
     total_reward = 0
 
     s = env.reset()
     for t in range(t_max):
-        a = epsilon_greedy_policy(agent, sess, np.array([s], dtype=np.float32))[0]
+        a = action_fn(agent, sess, np.array([s], dtype=np.float32))[0]
 
         next_s, r, done, _ = env.step(a)
 
@@ -50,7 +61,7 @@ def update_wraper(
 
 
 def run_wrapper(
-        n_games, learning_fn, update_fn, play_fn,
+        n_games, learning_fn, update_fn, play_fn, action_fn,
         env_name, make_env_fn, agent_cls,
         run_args, agent_agrs,
         plot_stats=False, api_key=None,
@@ -94,7 +105,7 @@ def run_wrapper(
             env = make_env_fn(env_name, 1)
             monitor_dir = os.path.join(model_dir, "monitor")
             env = gym.wrappers.Monitor(env, monitor_dir, force=True)
-            sessions = [play_fn(sess, agent, env) for _ in range(300)]
+            sessions = [play_fn(sess, agent, env, action_fn) for _ in range(300)]
             env.close()
             gym.upload(monitor_dir, api_key=api_key)
 

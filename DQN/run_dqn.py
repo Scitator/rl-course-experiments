@@ -7,14 +7,14 @@ from rstools.utils.batch_utils import iterate_minibatches
 from agent_networks import copy_model_parameters
 from wrappers import Transition
 from run_wrapper import typical_args, typical_argsparse, run_wrapper, update_wraper, \
-    epsilon_greedy_policy, play_session
+    epsilon_greedy_actions, play_session
 
 from DQN.dqn import DqnAgent
 from DQN.dqrn import DqrnAgent
 
 
-def update(sess, agent, transitions,
-           discount_factor=0.99, reward_norm=1.0, batch_size=32):
+def update(sess, agent, transitions, init_state=None,
+           discount_factor=0.99, reward_norm=1.0, batch_size=32, time_major=False):
     loss = 0.0
 
     transitions_it = zip(
@@ -25,7 +25,7 @@ def update(sess, agent, transitions,
             iterate_minibatches(transitions.done, batch_size))
 
     for states, actions, rewards, next_states, dones in transitions_it:
-        values_next = agent.predict(sess, next_states)
+        values_next = agent.predict_qvalues(sess, next_states)
         td_target = rewards * reward_norm + \
                     np.invert(dones).astype(np.float32) * \
                     discount_factor * values_next.max(axis=1)
@@ -56,7 +56,7 @@ def generate_sessions(sess, agent, env_pool, t_max=1000, update_fn=None):
 
     states = env_pool.pool_states()
     for t in range(t_max):
-        actions = epsilon_greedy_policy(agent, sess, states)
+        actions = epsilon_greedy_actions(agent, sess, states)
         next_states, rewards, dones, _ = env_pool.step(actions)
 
         if update_fn is not None:
@@ -108,7 +108,8 @@ def run(env_name, make_env_fn, agent_cls,
         load=False, gpu_option=0.4,
         n_games=10):
     run_wrapper(
-        n_games, dqn_learning, update_wraper(update, **update_args), play_session,
+        n_games, dqn_learning, update_wraper(update, **update_args),
+        play_session, epsilon_greedy_actions,
         env_name, make_env_fn, agent_cls,
         run_args, agent_agrs,
         plot_stats, api_key,

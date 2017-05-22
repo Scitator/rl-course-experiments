@@ -4,7 +4,6 @@ from tqdm import trange
 
 from rstools.utils.batch_utils import iterate_minibatches
 
-from networks import activations, networks, network_wrapper, str2params
 from wrappers import Transition
 from run_wrapper import typical_args, typical_argsparse, run_wrapper, update_wraper, \
     epsilon_greedy_policy, play_session
@@ -170,7 +169,8 @@ def run(env_name, make_env_fn, agent_cls,
         load=False, gpu_option=0.4,
         n_games=10):
     run_wrapper(
-        n_games, a3c_learning, update_wraper(update, **update_args), play_session,
+        n_games, a3c_learning, update_wraper(update, **update_args),
+        play_session, epsilon_greedy_policy,
         env_name, make_env_fn, agent_cls,
         run_args, agent_agrs,
         plot_stats, api_key,
