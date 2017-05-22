@@ -5,6 +5,7 @@ from tqdm import trange
 from rstools.utils.batch_utils import iterate_minibatches
 
 from agent_networks import copy_model_parameters
+from networks import activations
 from wrappers import Transition
 from run_wrapper import typical_args, typical_argsparse, run_wrapper, update_wraper, \
     epsilon_greedy_actions, play_session
@@ -173,7 +174,7 @@ def main():
     agent_args = {
         "network": network,
         "hidden_size": args.hidden_size,
-        "hidden_activation": args.hidden_activation,
+        "hidden_activation": activations[args.hidden_activation],
         "feature_net_optimization": optimization_params,
         "hidden_state_optimization": optimization_params,
         "value_net_optimiaztion": value_optimization_params,
@@ -185,7 +186,8 @@ def main():
     run(args.env, make_env_fn, agent_cls,
         run_args, update_args, agent_args,
         args.plot_history, args.api_key,
-        args.load, args.gpu_option)
+        args.load, args.gpu_option,
+        args.n_games)
 
 
 if __name__ == '__main__':

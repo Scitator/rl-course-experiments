@@ -187,12 +187,6 @@ def _parse_args():
 
     parser = typical_args(parser)
 
-    # env pool params
-    parser.add_argument(
-        '--n_games',
-        type=int,
-        default=10)
-
     # agent special params & optimization
     parser.add_argument(
         '--policy_lr',

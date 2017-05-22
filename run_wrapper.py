@@ -105,7 +105,7 @@ def run_wrapper(
             env = make_env_fn(env_name, 1)
             monitor_dir = os.path.join(model_dir, "monitor")
             env = gym.wrappers.Monitor(env, monitor_dir, force=True)
-            sessions = [play_fn(sess, agent, env, action_fn) for _ in range(300)]
+            sessions = [play_fn(sess, agent, env, action_fn=action_fn) for _ in range(300)]
             env.close()
             gym.upload(monitor_dir, api_key=api_key)
 
@@ -116,6 +116,12 @@ def typical_args(parser):
         type=str,
         default='CartPole-v0',  # BreakoutDeterministic-v0
         help='The environment to use')
+
+    # env pool params
+    parser.add_argument(
+        '--n_games',
+        type=int,
+        default=10)
 
     parser.add_argument(
         '--n_epochs',
