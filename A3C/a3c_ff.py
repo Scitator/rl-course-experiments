@@ -2,7 +2,8 @@
 
 import tensorflow as tf
 from rstools.tf.optimization import build_model_optimization, build_scope_optimization
-from agent_networks import FeatureNet, PolicyNet, ValueNet
+
+from agents.agent_networks import FeatureNet, PolicyNet, ValueNet
 
 
 class A3CFFAgent(object):

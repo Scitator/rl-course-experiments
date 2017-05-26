@@ -1,14 +1,13 @@
-import numpy as np
-import string
 import os
-import gym
-from gym import wrappers
-import tensorflow as tf
+import string
 
+import gym
+import numpy as np
+import tensorflow as tf
 from rstools.utils.os_utils import save_history, save_model
 from rstools.visualization.plotter import plot_all_metrics
 
-from networks import activations, networks, network_wrapper, str2params
+from agents.networks import activations, networks, network_wrapper, str2params
 from wrappers import make_env, make_image_env_wrapper
 
 

@@ -1,15 +1,14 @@
-import numpy as np
 import argparse
-from tqdm import trange
 
+import numpy as np
 from rstools.utils.batch_utils import iterate_minibatches
-
-from wrappers import Transition
-from run_wrapper import typical_args, typical_argsparse, run_wrapper, update_wraper, \
-    epsilon_greedy_policy, play_session
+from tqdm import trange
 
 from A3C.a3c_ff import A3CFFAgent
 from A3C.a3c_lstm import A3CLstmAgent
+from wrappers import Transition
+from wrappers.run_wrapper import typical_args, typical_argsparse, run_wrapper, update_wraper, \
+    epsilon_greedy_policy, play_session
 
 
 def update(sess, a3c_agent, transitions, initial_state=None,

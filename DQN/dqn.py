@@ -1,9 +1,10 @@
 #!/usr/bin/python3
 
 import tensorflow as tf
+from agents.agent_states import LinearHiddenState
 from rstools.tf.optimization import build_model_optimization
-from agent_networks import FeatureNet, QvalueNet, ValueNet
-from agent_states import LinearHiddenState
+
+from agents.agent_networks import FeatureNet, QvalueNet, ValueNet
 
 
 class DqnAgent(object):

@@ -1,17 +1,16 @@
-import numpy as np
 import argparse
+
+import numpy as np
 from tqdm import trange
 
 from rstools.utils.batch_utils import iterate_minibatches
 
-from agent_networks import copy_model_parameters
-from networks import activations
-from wrappers import Transition
-from run_wrapper import typical_args, typical_argsparse, run_wrapper, update_wraper, \
-    epsilon_greedy_actions, play_session
-
 from DQN.dqn import DqnAgent
 from DQN.dqrn import DqrnAgent
+from agents.networks import activations
+from wrappers.gym_wrappers import Transition
+from wrappers.run_wrappers import typical_args, typical_argsparse, run_wrapper, update_wraper, \
+    epsilon_greedy_actions, play_session
 
 
 def update(sess, agent, transitions, init_state=None,
@@ -126,8 +125,6 @@ def _parse_args():
         type=str,
         choices=["dqn", "dqrn"])
 
-    parser = typical_args(parser)
-
     # special optimization params
     parser.add_argument(
         '--qvalue_lr',
@@ -147,10 +144,8 @@ def _parse_args():
         '--double_dqn',
         action='store_true',
         default=False)
-    parser.add_argument(
-        '--advantage_dqn',
-        action='store_true',
-        default=False)
+
+    parser = typical_args(parser)
 
     args = parser.parse_args()
     return args
@@ -187,7 +182,8 @@ def main():
         run_args, update_args, agent_args,
         args.plot_history, args.api_key,
         args.load, args.gpu_option,
-        args.n_games)
+        args.n_games,
+        args.target_dqn, args.double_dqn)
 
 
 if __name__ == '__main__':

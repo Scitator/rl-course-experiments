@@ -97,3 +97,5 @@ ENV/
 *tmp*
 *logs*
 *.log
+
+solutions.md

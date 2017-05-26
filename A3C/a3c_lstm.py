@@ -1,12 +1,11 @@
 #!/usr/bin/python3
 
 import tensorflow as tf
+from rstools.tf.optimization import build_model_optimization, build_scope_optimization
 from tensorflow.contrib import rnn
 
-from rstools.tf.optimization import build_model_optimization, build_scope_optimization
-
-from agent_networks import FeatureNet, PolicyNet, ValueNet, \
-    get_state_variables, get_state_update_op
+from agents.agent_networks import FeatureNet, PolicyNet, ValueNet
+from agents.agent_states import RecurrentHiddenState, get_state_variables, get_state_update_op
 
 
 class A3CLstmAgent(object):
