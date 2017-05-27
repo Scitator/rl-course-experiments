@@ -1,8 +1,6 @@
 import argparse
 import numpy as np
 from tqdm import trange
-import tensorflow as tf
-import tensorflow.contrib.graph_editor as ge
 
 from rstools.utils.batch_utils import iterate_minibatches
 
@@ -15,8 +13,8 @@ from wrappers.run_wrappers import typical_args, typical_argsparse, run_wrapper, 
     epsilon_greedy_actions, play_session
 
 
-def update(sess, agent, target_agent, transitions, init_state=None,
-           discount_factor=0.99, reward_norm=1.0, batch_size=32, time_major=False):
+def update(sess, agent, target_agent, transitions,
+           discount_factor=0.99, reward_norm=1.0, batch_size=32):
     loss = 0.0
     time_len = transitions.state.shape[0]
 
@@ -65,7 +63,6 @@ def update(sess, agent, target_agent, transitions, init_state=None,
     return loss / time_len
 
 
-# @TODO: rewrite for DqrnAgent too
 def generate_sessions(
         sess, agent, target_agent, env_pool,
         t_max=1000, epsilon=0.01,
@@ -73,10 +70,6 @@ def generate_sessions(
     total_reward = 0.0
     total_qvalue_loss = 0.0
     total_games = 0.0
-
-    # init_state = None
-    # if hasattr(agent, "get_belief_state"):
-    #     init_state = agent.get_belief_state(sess)
 
     states = env_pool.pool_states()
     for t in range(t_max):
@@ -87,6 +80,9 @@ def generate_sessions(
             transition = Transition(
                 state=states, action=actions, reward=rewards, next_state=next_states, done=dones)
             total_qvalue_loss += update_fn(sess, agent, target_agent, transition)
+
+        if isinstance(agent, DqrnAgent):
+            agent.update_belief_state(sess, states, dones)
 
         states = next_states
 
@@ -127,8 +123,7 @@ def dqn_learning(
             generate_sessions(
                 sess, agent, target_agent, env, t_max, epsilon=epsilon, update_fn=update_fn)
             for _ in range(n_sessions)]
-        session_rewards, session_qvalue_loss, session_steps = \
-            map(np.array, zip(*sessions))
+        session_rewards, session_qvalue_loss, session_steps = map(np.array, zip(*sessions))
 
         history["reward"][i] = np.mean(session_rewards)
         history["qvalue_loss"][i] = np.mean(session_qvalue_loss)

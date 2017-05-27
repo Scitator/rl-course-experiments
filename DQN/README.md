@@ -32,7 +32,3 @@
 - [Deep Reinforcement Learning with Double Q-learning](http://arxiv.org/abs/1509.06461)
 - [Prioritized Experience Replay](http://arxiv.org/abs/1511.05952)
 
-**Deep Learning:**
-
-- [Tensorflow](http://www.tensorflow.org)
-- [Deep Learning Books](http://www.deeplearningbook.org/)

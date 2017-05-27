@@ -37,14 +37,3 @@
 - [Reinforcement Learning: An Introduction](https://webdocs.cs.ualberta.ca/~sutton/book/bookdraft2016sep.pdf) - Chapter 7: Multi-Step Bootstrapping
 - [Reinforcement Learning: An Introduction](https://webdocs.cs.ualberta.ca/~sutton/book/bookdraft2016sep.pdf) - Chapter 12: Eligibility Traces
 
-
-### Exercises
-
-- [Windy Gridworld Playground](Windy Gridworld Playground.ipynb)
-- Implement SARSA
-  - [Exercise](SARSA.ipynb)
-  - [Solution](SARSA Solution.ipynb)
-- [Cliff Environment Playground](Cliff Environment Playground.ipynb)
-- Implement Q-Learning in Python
-  - [Exercise](Q-Learning.ipynb)
-  - [Solution](Q-Learning Solution.ipynb)

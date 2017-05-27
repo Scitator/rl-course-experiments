@@ -29,7 +29,7 @@ class DqrnAgent(object):
 
         self.hidden_state = RecurrentHiddenState(self.feature_net.feature_state, cell)
 
-        if self.special("double_network", False):
+        if self.special.get("dueling_network", False):
             self.qvalue_net = QvalueNet(
                 self.hidden_state.state, self.n_actions,
                 dict(**self.special.get("qvalue_net", {}), **{"advantage": True}))
@@ -37,15 +37,21 @@ class DqrnAgent(object):
                 self.hidden_state.state,
                 self.special.get("value_net", {}))
 
+            # a bit hacky way
+            self.agent_loss = tf.losses.mean_squared_error(
+                labels=self.qvalue_net.td_target,
+                predictions=self.value_net.predicted_values_for_actions +
+                            self.qvalue_net.predicted_qvalues_for_actions)
+
             build_model_optimization(
                 self.value_net,
-                self.special.get("value_net_optimization", None))
-            model_loss = 0.5 * (self.qvalue_net.loss + self.value_net.loss)
+                self.special.get("value_net_optimization", None),
+                loss=self.agent_loss)
         else:
             self.qvalue_net = QvalueNet(
                 self.hidden_state.state, self.n_actions,
                 self.special.get("qvalue_net", {}))
-            model_loss = self.qvalue_net.loss
+            self.agent_loss = self.qvalue_net.loss
 
         build_model_optimization(
             self.qvalue_net,
@@ -54,19 +60,25 @@ class DqrnAgent(object):
         build_model_optimization(
             self.hidden_state,
             self.special.get("hidden_state_optimization", None),
-            loss=model_loss)
+            loss=self.agent_loss)
         build_model_optimization(
             self.feature_net,
             self.special.get("feature_net_optimization", None),
-            loss=model_loss)
+            loss=self.agent_loss)
 
     def predict_qvalues(self, sess, state_batch):
-        return sess.run(
-            self.qvalue_net.predicted_qvalues,
-            feed_dict={
-                self.feature_net.states: state_batch,
-                self.feature_net.is_training: False
-            })
+        if self.special.get("dueling_network", False):
+            return sess.run(
+                self.value_net.predicted_values + self.qvalue_net.predicted_qvalues,
+                feed_dict={
+                    self.feature_net.states: state_batch,
+                    self.feature_net.is_training: False})
+        else:
+            return sess.run(
+                self.qvalue_net.predicted_qvalues,
+                feed_dict={
+                    self.feature_net.states: state_batch,
+                    self.feature_net.is_training: False})
 
     def update_belief_state(self, sess, state_batch, done_batch):
         _ = sess.run(

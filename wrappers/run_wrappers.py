@@ -34,12 +34,12 @@ def play_session(sess, agent, env, t_max=int(1e10), action_fn=None):
     s = env.reset()
     for t in range(t_max):
         a = action_fn(agent, sess, np.array([s], dtype=np.float32))[0]
-
         next_s, r, done, _ = env.step(a)
-
         total_reward += r
+
         if hasattr(agent, "update_belief_state"):
             agent.update_belief_state(sess, [s], [done])
+
         s = next_s
         if done:
             break
