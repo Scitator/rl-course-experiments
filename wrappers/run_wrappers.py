@@ -59,6 +59,20 @@ def update_wraper(
     return wrapper
 
 
+def create_agent(agent_cls, state_shape, n_actions, agent_agrs, use_target_network):
+    agent = agent_cls(
+        state_shape, n_actions, **agent_agrs)
+
+    if use_target_network:
+        targets_special = {**agent_agrs["special"], **{"scope": "target_" + agent.scope}}
+        agent_agrs["special"] = targets_special
+        target_agent = agent_cls(
+            state_shape, n_actions, **agent_agrs)
+        agent = (agent, target_agent)
+
+    return agent
+
+
 def run_wrapper(
         n_games, learning_fn, update_fn, play_fn, action_fn,
         env_name, make_env_fn, agent_cls,
@@ -72,16 +86,9 @@ def run_wrapper(
     n_actions = env.action_space.n
     state_shape = env.observation_space.shape
 
-    agent = agent_cls(
-        state_shape, n_actions, agent_agrs["network"],
-        special=agent_agrs)
-
-    if use_target_network:
-        target_args = {**agent_agrs, **{"scope": "target_" + agent.scope}}
-        target_agent = agent_cls(
-            state_shape, n_actions, agent_agrs["network"],
-            special=target_args)
-        agent = (agent, target_agent)
+    # hack, I know
+    agent_agrs["special"]["batch_size"] = n_games
+    agent = create_agent(agent_cls, state_shape, n_actions, agent_agrs, use_target_network)
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
 
@@ -104,19 +111,29 @@ def run_wrapper(
             print("Exiting training procedure")
         save_model(sess, saver, log_dir)
 
-        if plot_stats:
-            save_history(history, log_dir)
-            plotter_dir = os.path.join(log_dir, "plotter")
-            plot_all_metrics(history, save_dir=plotter_dir)
+    if plot_stats:
+        save_history(history, log_dir)
+        plotter_dir = os.path.join(log_dir, "plotter")
+        plot_all_metrics(history, save_dir=plotter_dir)
 
-        if api_key is not None:
-            env_name = env_name.replace("Deterministic", "")
-            env = make_env_fn(env_name, 1)
-            monitor_dir = os.path.join(log_dir, "monitor")
-            env = gym.wrappers.Monitor(env, monitor_dir, force=True)
+    if api_key is not None:
+        tf.reset_default_graph()
+        agent_agrs["special"]["batch_size"] = 1
+        agent = create_agent(agent_cls, state_shape, n_actions, agent_agrs, use_target_network)
+
+        env_name = env_name.replace("Deterministic", "")
+        env = make_env_fn(env_name, 1)
+        monitor_dir = os.path.join(log_dir, "monitor")
+        env = gym.wrappers.Monitor(env, monitor_dir, force=True)
+
+        with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+            saver = tf.train.Saver()
+            saver.restore(sess, "{}/model.ckpt".format(log_dir))
+
             sessions = [play_fn(sess, agent, env, action_fn=action_fn) for _ in range(300)]
-            env.close()
-            gym.upload(monitor_dir, api_key=api_key)
+
+        env.close()
+        gym.upload(monitor_dir, api_key=api_key)
 
 
 def typical_args(parser):

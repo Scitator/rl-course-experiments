@@ -1,6 +1,7 @@
 import argparse
 import numpy as np
 from tqdm import trange
+from tensorflow.contrib import rnn
 
 from rstools.utils.batch_utils import iterate_minibatches
 
@@ -13,8 +14,8 @@ from wrappers.run_wrappers import typical_args, typical_argsparse, run_wrapper, 
     epsilon_greedy_actions, play_session
 
 
-def update(sess, agent, target_agent, transitions,
-           discount_factor=0.99, reward_norm=1.0, batch_size=32):
+def update(sess, agent, target_agent, transitions, init_state=None,
+           discount_factor=0.99, reward_norm=1.0, batch_size=32, time_major=False):
     loss = 0.0
     time_len = transitions.state.shape[0]
 
@@ -239,9 +240,10 @@ def main():
         **{"initial_lr": args.value_lr}
     }
 
-    agent_args = {
+    agent_cls = DqnAgent if args.agent == "dqn" else DqrnAgent
+
+    special = {
         "dueling_network": args.dueling_dqn,
-        "network": network,
         "hidden_size": args.hidden_size,
         "hidden_activation": activations[args.hidden_activation],
         "feature_net_optimization": optimization_params,
@@ -250,7 +252,10 @@ def main():
         "qvalue_net_optimiaztion": qvalue_optimization_params,
     }
 
-    agent_cls = DqnAgent if args.agent == "dqn" else DqrnAgent
+    agent_args = {
+        "network": network,
+        "special": special
+    }
 
     run(args.env, make_env_fn, agent_cls,
         run_args, update_args, agent_args,

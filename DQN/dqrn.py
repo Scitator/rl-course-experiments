@@ -9,10 +9,9 @@ from agents.agent_states import RecurrentHiddenState
 
 
 class DqrnAgent(object):
-    def __init__(self, state_shape, n_actions, network, cell, special=None):
+    def __init__(self, state_shape, n_actions, network, special=None):
         self.state_shape = state_shape
         self.n_actions = n_actions
-        self.cell_size = cell.state_size
 
         self.is_end = tf.placeholder(shape=[None], dtype=tf.bool, name="is_end")
 
@@ -20,14 +19,17 @@ class DqrnAgent(object):
         self.scope = special.get("scope", "dqrn")
 
         with tf.variable_scope(self.scope):
-            self._build_graph(network, cell)
+            self._build_graph(network)
 
-    def _build_graph(self, network, cell):
+    def _build_graph(self, network):
         self.feature_net = FeatureNet(
             self.state_shape, network,
             self.special.get("feature_net", {}))
 
-        self.hidden_state = RecurrentHiddenState(self.feature_net.feature_state, cell)
+        self.hidden_state = RecurrentHiddenState(
+            self.feature_net.feature_state,
+            self.special.get("hidden_size", 512),
+            self.special.get("hidden_activation", tf.tanh))
 
         if self.special.get("dueling_network", False):
             self.qvalue_net = QvalueNet(
