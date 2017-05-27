@@ -29,7 +29,8 @@ class DqrnAgent(object):
         self.hidden_state = RecurrentHiddenState(
             self.feature_net.feature_state,
             self.special.get("hidden_size", 512),
-            self.special.get("hidden_activation", tf.tanh))
+            self.special.get("hidden_activation", tf.tanh),
+            self.special.get("batch_size", 1))
 
         if self.special.get("dueling_network", False):
             self.qvalue_net = QvalueNet(
