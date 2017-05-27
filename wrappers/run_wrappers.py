@@ -63,6 +63,7 @@ def run_wrapper(
         n_games, learning_fn, update_fn, play_fn, action_fn,
         env_name, make_env_fn, agent_cls,
         run_args, agent_agrs,
+        log_dir=None,
         plot_stats=False, api_key=None,
         load=False, gpu_option=0.4,
         use_target_network=False):
@@ -86,12 +87,12 @@ def run_wrapper(
 
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         saver = tf.train.Saver()
-        model_dir = "./logs_" + env_name.replace(string.punctuation, "_")
+        log_dir = log_dir or "./logs_" + env_name.replace(string.punctuation, "_")
 
         if not load:
             sess.run(tf.global_variables_initializer())
         else:
-            saver.restore(sess, "{}/model.ckpt".format(model_dir))
+            saver.restore(sess, "{}/model.ckpt".format(log_dir))
 
         try:
             # @TODO: still need to pass target_net
@@ -101,17 +102,17 @@ def run_wrapper(
                 **run_args)
         except KeyboardInterrupt:
             print("Exiting training procedure")
-        save_model(sess, saver, model_dir)
+        save_model(sess, saver, log_dir)
 
         if plot_stats:
-            save_history(history, model_dir)
-            plotter_dir = os.path.join(model_dir, "plotter")
+            save_history(history, log_dir)
+            plotter_dir = os.path.join(log_dir, "plotter")
             plot_all_metrics(history, save_dir=plotter_dir)
 
         if api_key is not None:
             env_name = env_name.replace("Deterministic", "")
             env = make_env_fn(env_name, 1)
-            monitor_dir = os.path.join(model_dir, "monitor")
+            monitor_dir = os.path.join(log_dir, "monitor")
             env = gym.wrappers.Monitor(env, monitor_dir, force=True)
             sessions = [play_fn(sess, agent, env, action_fn=action_fn) for _ in range(300)]
             env.close()
@@ -149,6 +150,10 @@ def typical_args(parser):
         default=False)
     parser.add_argument(
         '--api_key',
+        type=str,
+        default=None)
+    parser.add_argument(
+        '--log_dir',
         type=str,
         default=None)
     parser.add_argument(

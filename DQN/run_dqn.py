@@ -153,6 +153,7 @@ def dqn_learning(
 
 def run(env_name, make_env_fn, agent_cls,
         run_args, update_args, agent_agrs,
+        log_dir=None,
         plot_stats=False, api_key=None,
         load=False, gpu_option=0.4,
         n_games=10,
@@ -162,6 +163,7 @@ def run(env_name, make_env_fn, agent_cls,
         play_session, epsilon_greedy_actions,
         env_name, make_env_fn, agent_cls,
         run_args, agent_agrs,
+        log_dir=log_dir,
         plot_stats=plot_stats, api_key=api_key,
         load=load, gpu_option=gpu_option,
         use_target_network=target_dqn)
@@ -257,6 +259,7 @@ def main():
 
     run(args.env, make_env_fn, agent_cls,
         run_args, update_args, agent_args,
+        args.log_dir,
         args.plot_history, args.api_key,
         args.load, args.gpu_option,
         args.n_games,
