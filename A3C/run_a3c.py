@@ -172,8 +172,8 @@ def run(env_name, make_env_fn, agent_cls,
         play_session, epsilon_greedy_policy,
         env_name, make_env_fn, agent_cls,
         run_args, agent_agrs,
-        plot_stats, api_key,
-        load, gpu_option)
+        plot_stats=plot_stats, api_key=api_key,
+        load=load, gpu_option=gpu_option)
 
 
 def _parse_args():

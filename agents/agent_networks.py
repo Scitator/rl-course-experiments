@@ -17,7 +17,7 @@ class FeatureNet(object):
         self.train_op = None
 
         self.relative_scope = self.special.get("scope", "feature_network")
-        self.scope = tf.get_variable_scope().name + "/" + self.relative_scope 
+        self.scope = tf.get_variable_scope().name + "/" + self.relative_scope
 
         self.feature_state = network(
             self.states,
@@ -40,7 +40,7 @@ class PolicyNet(object):
         self.train_op = None
 
         self.relative_scope = self.special.get("scope", "policy_network")
-        self.scope = tf.get_variable_scope().name + "/" + self.relative_scope 
+        self.scope = tf.get_variable_scope().name + "/" + self.relative_scope
 
         self.predicted_probs = self._probs(
             hidden_state,
@@ -52,7 +52,7 @@ class PolicyNet(object):
 
         self.predicted_probs_for_actions = tf.gather(
             tf.reshape(self.predicted_probs, [-1]), predicted_ids)
-        
+
         J = tf.reduce_mean(tf.log(self.predicted_probs_for_actions) * self.cumulative_rewards)
         self.loss = -J # * self.special.get("reward_koef", 1.0)
 
@@ -87,24 +87,24 @@ class ValueNet(object):
         self.relative_scope = self.special.get("scope", "value_network")
         self.scope = tf.get_variable_scope().name + "/" + self.relative_scope
 
-        self.predicted_values = tf.squeeze(
-            self._state_value(
-                hidden_state,
-                scope=self.relative_scope + "/state_value",
-                reuse=self.special.get("reuse_state_value", False)),
-            axis=1)
+        self.predicted_values = self._state_value(
+            hidden_state,
+            scope=self.relative_scope + "/state_value",
+            reuse=self.special.get("reuse_state_value", False))
+
+        self.predicted_values_for_actions = tf.squeeze(self.predicted_values, axis=1)
 
         self.loss = tf.losses.mean_squared_error(
             labels=self.td_target,
-            predictions=self.predicted_values)
+            predictions=self.predicted_values_for_actions)
 
     def _state_value(self, hidden_state, scope, reuse=False):
         with tf.variable_scope(scope, reuse=reuse):
-            qvalues = tf.layers.dense(
+            state_values = tf.layers.dense(
                 hidden_state,
                 units=1,
                 activation=None)
-            return qvalues
+            return state_values
 
 
 class QvalueNet(object):
@@ -121,7 +121,7 @@ class QvalueNet(object):
         self.train_op = None
 
         self.relative_scope = self.special.get("scope", "qvalue_network")
-        self.scope = tf.get_variable_scope().name + "/" + self.relative_scope 
+        self.scope = tf.get_variable_scope().name + "/" + self.relative_scope
 
         self.predicted_qvalues = self._qvalues(
             hidden_state,
@@ -149,6 +149,20 @@ class QvalueNet(object):
             return qvalues
 
 
+def copy_scope_parameters(sess, net1_scope, net2_scope):
+    net1_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=net1_scope)
+    net2_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=net2_scope)
+    net1_params = sorted(net1_params, key=lambda v: v.name)
+    net2_params = sorted(net2_params, key=lambda v: v.name)
+
+    update_ops = []
+    for net1_v, net2_v in zip(net1_params, net2_params):
+        op = net2_v.assign(net1_v)
+        update_ops.append(op)
+
+    sess.run(update_ops)
+
+
 def copy_model_parameters(sess, net1, net2):
     """
     Copies the model parameters of one net to another.
@@ -158,14 +172,5 @@ def copy_model_parameters(sess, net1, net2):
       net1: net to copy the parameters from
       net2: net to copy the parameters to
     """
-    net1_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=net1.scope)
-    net1_params = sorted(net1_params, key=lambda v: v.name)
-    net2_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=net2.scope)
-    net2_params = sorted(net2_params, key=lambda v: v.name)
 
-    update_ops = []
-    for net1_v, net2_v in zip(net1_params, net2_params):
-        op = net2_v.assign(net1_v)
-        update_ops.append(op)
-
-    sess.run(update_ops)
+    copy_scope_parameters(sess, net1.scope, net2.scope)

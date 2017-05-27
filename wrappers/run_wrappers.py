@@ -8,7 +8,7 @@ from rstools.utils.os_utils import save_history, save_model
 from rstools.visualization.plotter import plot_all_metrics
 
 from agents.networks import activations, networks, network_wrapper, str2params
-from wrappers import make_env, make_image_env_wrapper
+from wrappers.gym_wrappers import make_env, make_image_env_wrapper
 
 
 def epsilon_greedy_policy(agent, sess, observations):
@@ -64,7 +64,8 @@ def run_wrapper(
         env_name, make_env_fn, agent_cls,
         run_args, agent_agrs,
         plot_stats=False, api_key=None,
-        load=False, gpu_option=0.4):
+        load=False, gpu_option=0.4,
+        use_target_network=False):
     env = make_env_fn(env_name, n_games)
 
     n_actions = env.action_space.n
@@ -73,6 +74,13 @@ def run_wrapper(
     agent = agent_cls(
         state_shape, n_actions, agent_agrs["network"],
         special=agent_agrs)
+
+    if use_target_network:
+        target_args = {**agent_agrs, **{"scope": "target_" + agent.scope}}
+        target_agent = agent_cls(
+            state_shape, n_actions, agent_agrs["network"],
+            special=target_args)
+        agent = (agent, target_agent)
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
 
@@ -86,6 +94,7 @@ def run_wrapper(
             saver.restore(sess, "{}/model.ckpt".format(model_dir))
 
         try:
+            # @TODO: still need to pass target_net
             history = learning_fn(
                 sess, agent, env,
                 update_fn=update_fn,
