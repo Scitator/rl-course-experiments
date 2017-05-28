@@ -47,26 +47,32 @@ For simple script running you need to install additional [repo](https://github.c
 
 DQN:
 
-`PYTHONPATH=. python DQN/run_dqn.py --plot_history 
+```
+PYTHONPATH=. python DQN/run_dqn.py --plot_history 
 --feature_network linear --layers 16-16 --activation tanh --hidden_size 16 --hidden_activation tanh 
 --n_epochs 500 --n_games 32 --batch_size 32 --t_max 100  
 --qvalue_lr 0.00005 --feature_lr 0.00005 --value_lr 0.00005 --initial_epsilon 0.25 
---api_key <paste_your_gym_api_key_here>`
+--api_key <paste_your_gym_api_key_here>
+```
 
 Reinforce:
 
-`PYTHONPATH=. python PG/run_reinforce.py --plot_history 
+```
+PYTHONPATH=. python PG/run_reinforce.py --plot_history 
 --feature_network linear --layers 16-16 --activation tanh --hidden_size 16 --hidden_activation tanh 
 --n_epochs 3200 --n_games 32 --batch_size 32 --t_max 50 
 --entropy_factor 0.005 --policy_lr 0.00001 --feature_lr 0.00005 
---api_key <paste_your_gym_api_key_here>`
+--api_key <paste_your_gym_api_key_here>
+```
 
 Feed-Forward Asynchronous Advantage Actor-Critic:
 
-`PYTHONPATH=. python A3C/run_a3c.py --plot_history 
+```
+PYTHONPATH=. python A3C/run_a3c.py --plot_history 
 --feature_network linear --layers 16-16 --activation tanh --hidden_size 16 --hidden_activation tanh 
 --n_epochs 200 --n_games 32 --batch_size 32 --t_max 10 --policy_lr 0.000001 
---api_key <paste_your_gym_api_key_here>`
+--api_key <paste_your_gym_api_key_here>
+```
 
 ##### Metrics
 
