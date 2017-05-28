@@ -29,7 +29,7 @@ Advanced techniques use Tensorflow for neural network implementations.
 * [Temporal Difference](https://github.com/Scitator/rl-course-experiments/tree/master/TD)
 * [Deep Q-Networks](https://github.com/Scitator/rl-course-experiments/tree/master/DQN)
 * [Policy Gradient](https://github.com/Scitator/rl-course-experiments/tree/master/PG)
-* [Asynchronous Advantage Actor-Critic](https://github.com/Scitator/rl-course-experiments/tree/master/A3C) [testing]
+* [Asynchronous Advantage Actor-Critic](https://github.com/Scitator/rl-course-experiments/tree/master/A3C)
 * [Optimality Tightening](https://arxiv.org/abs/1611.01606) [TODO]
 * [Trust Region Policy Optimization](https://arxiv.org/abs/1502.05477) [TODO]
 * Continuous action space [TODO]

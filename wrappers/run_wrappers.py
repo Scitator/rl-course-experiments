@@ -140,161 +140,184 @@ def typical_args(parser):
         '--env',
         type=str,
         default='CartPole-v0',  # BreakoutDeterministic-v0
-        help='The environment to use')
+        help='The environment to use. (default: %(default)s)')
 
     # env pool params
     parser.add_argument(
         '--n_games',
         type=int,
-        default=10)
+        default=10,
+        help='Number of parallel games to play during training. (default: %(default)s)')
 
     parser.add_argument(
         '--n_epochs',
         type=int,
-        default=100)
+        default=100,
+        help='Number of epochs to train. (default: %(default)s)')
     parser.add_argument(
         '--n_sessions',
         type=int,
-        default=10)
+        default=10,
+        help='Number of game session to play per one epoch. (default: %(default)s)')
     parser.add_argument(
         '--t_max',
         type=int,
-        default=1000)
+        default=1000,
+        help='Steps per game session to play. (default: %(default)s)')
     parser.add_argument(
         '--plot_history',
         action='store_true',
-        default=False)
+        default=False,
+        help='Plot graph with main train statistics (reward, loss, steps). (default: %(default)s)')
     parser.add_argument(
         '--api_key',
         type=str,
-        default=None)
+        default=None,
+        help='Your API key to submit to gym. (default: %(default)s)')
     parser.add_argument(
         '--log_dir',
         type=str,
-        default=None)
+        default=None,
+        help='Your API key to submit to gym. (default: %(default)s)')
     parser.add_argument(
         '--load',
         action='store_true',
-        default=False)
+        default=False,
+        help='Flag to load previous model from log_dir. (default: %(default)s)')
     parser.add_argument(
         '--gpu_option',
         type=float,
-        default=0.45)
+        default=0.45,
+        help='GPU usage. (default: %(default)s)')
 
     # feature network params
     parser.add_argument(
         '--feature_network',
         type=str,
-        choices=["linear", "convolution"])
+        choices=["linear", "convolution"],
+        default="linear",
+        help='Feature network type, need to create vector representation of the state. '
+             '(default: %(''default)s)')
     parser.add_argument(
         '--activation',
         type=str,
-        default="elu")
+        default="elu",
+        help='Typical activation for feature network. (default: %(default)s)')
     parser.add_argument(
         '--use_bn',
         action='store_true',
-        default=False)
+        default=False,
+        help='Batchnorm usage flag. (default: %(default)s) - no batchnorm')
     parser.add_argument(
         '--dropout',
         type=float,
-        default=-1)
+        default=-1,
+        help='Dropout keep prob rate. (default: %(default)s) - no dropout')
 
     # special args for linear network
     parser.add_argument(
         '--layers',
         type=str,
-        default=None)
+        default=None,
+        help='Linear feature network layers, splitted by \'-\'.')
 
     # special args for convolution network:
     parser.add_argument(
         '--n_filters',
         type=str,
-        default=None)
+        default=None,
+        help='Convolution feature network filters, splitted by \'-\'.')
     parser.add_argument(
         '--kernels',
         type=str,
-        default=None)
+        default=None,
+        help='Convolution feature network kernels, splitted by \'-\'.')
     parser.add_argument(
         '--strides',
         type=str,
-        default=None)
+        default=None,
+        help='Convolution feature network strides, splitted by \'-\'.')
 
     # typical hidden state params
     parser.add_argument(
         '--hidden_size',
         type=int,
-        default=512)
+        default=512,
+        help='Hidden state size. (default: %(default)s)')
     parser.add_argument(
         '--hidden_activation',
         type=str,
-        default="elu")
+        default="elu",
+        help='Hidden state activation. (default: %(default)s)')
 
     # typical optimization params
     parser.add_argument(
         '--feature_lr',
         type=float,
-        default=1e-3)
+        default=1e-3,
+        help='Learning rate for feature network. (default: %(default)s)')
     parser.add_argument(
         '--lr_decay_steps',
         type=float,
-        default=1e5)
+        default=1e5,
+        help='Learning rate decay steps. (default: %(default)s)')
     parser.add_argument(
         '--lr_decay',
         type=float,
-        default=0.999)
+        default=0.999,
+        help='Learning rate decay factor. (default: %(default)s)')
     parser.add_argument(
         '--grad_clip',
         type=float,
-        default=1.0)
+        default=1.0,
+        help='Gradient clip factor. (default: %(default)s)')
 
     # update args
     parser.add_argument(
         '--gamma',
         type=float,
         default=0.99,
-        help='Gamma discount factor')
+        help='Gamma discount factor. (default: %(default)s)')
     parser.add_argument(
         '--reward_norm',
         type=float,
-        default=1.0)
+        default=1.0,
+        help='Reward norm factor. (default: %(default)s)')
     parser.add_argument(
         '--batch_size',
         type=int,
-        default=10)
+        default=10,
+        help='Batch size for update, should be more than parallel games count. '
+             '(default: %(''default)s)')
     parser.add_argument(
         '--time_major',
         action='store_true',
-        default=False)
+        default=False,
+        help='Time-major flag for update. (default: %(default)s) - batch-major')
 
     # preprocess args for image envs
     parser.add_argument(
         '--image_width',
         type=float,
-        default=64)
+        default=64,
+        help='Image-based environments preprocessing, cut to current width. '
+             '(default: %(default)s)')
     parser.add_argument(
         '--image_height',
         type=float,
-        default=64)
+        default=64,
+        help='Image-based environments preprocessing, cut to current height. '
+             '(default: %(default)s)')
     parser.add_argument(
         '--image_grayscale',
         action='store_true',
-        default=False)
+        default=False,
+        help='Image-based environments preprocessing, flag to grayscale state image.')
     parser.add_argument(
-        '--image_crop_x1',
-        type=int,
-        default=None)
-    parser.add_argument(
-        '--image_crop_x2',
-        type=int,
-        default=None)
-    parser.add_argument(
-        '--image_crop_y1',
-        type=int,
-        default=None)
-    parser.add_argument(
-        '--image_crop_y2',
-        type=int,
-        default=None)
+        '--image_corners',
+        type=str,
+        default="0-0-0-0",
+        help='Image-based environments preprocessing, image corners splitted by \'-\'.')
 
     return parser
 
@@ -304,22 +327,34 @@ def typical_argsparse(args):
         network_args = {
             "layers": str2params(args.layers)
         }
+        make_env_fn = make_env
     elif args.feature_network == "convolution":
         network_args = {
             "n_filters": str2params(args.n_filters),
             "kernels": str2params(args.kernels),
             "strides": str2params(args.strides)
         }
+
+        image_crop_x1, image_crop_x2, image_crop_y1, image_crop_y2 = str2params(args.image_corners)
+
+        image_preprocessing_params = {
+            "width": args.image_width,
+            "height": args.image_height,
+            "grayscale": args.image_grayscale,
+            "crop": lambda img: img[image_crop_x1:image_crop_x2, image_crop_y1:image_crop_y2]
+        }
+
+        make_env_fn = make_image_env_wrapper(image_preprocessing_params)
     else:
         raise NotImplemented()
 
     network = network_wrapper(
-        networks[args.feature_network],
-        dict(**network_args, **{
+        networks[args.feature_network], {
+            **network_args, **{
             "activation_fn": activations[args.activation],
             "use_bn": args.use_bn,
             "dropout": args.dropout
-        }))
+        }})
 
     run_args = {
         "n_epochs": args.n_epochs,
@@ -338,17 +373,5 @@ def typical_argsparse(args):
         "lr_decay": args.lr_decay,
         "grad_clip": args.grad_clip
     }
-
-    image_preprocessing_params = {
-        "width": args.image_width,
-        "height": args.image_height,
-        "grayscale": args.image_grayscale,
-        "crop": lambda img: img[args.image_crop_x1:args.image_crop_x1,
-                            args.image_crop_y1:args.image_crop_y1]
-    }
-
-    make_env_fn = make_env \
-        if args.feature_network == "linear" \
-        else make_image_env_wrapper(image_preprocessing_params)
 
     return network, run_args, update_args, optimization_params, make_env_fn

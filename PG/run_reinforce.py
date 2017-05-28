@@ -157,12 +157,14 @@ def _parse_args():
     parser.add_argument(
         '--policy_lr',
         type=float,
-        default=1e-4)
+        default=1e-4,
+        help='Learning rate for policy network. (default: %(default)s)')
 
     parser.add_argument(
-        '--entropy_koef',
+        '--entropy_factor',
         type=float,
-        default=1e-2)
+        default=1e-2,
+        help='Entropy factor for policy network. (default: %(default)s)')
 
     args = parser.parse_args()
     return args
@@ -179,7 +181,7 @@ def main():
     }
 
     policy_net_params = {
-        "entropy_koef": args.entropy_koef
+        "entropy_factor": args.entropy_factor
     }
 
     agent_cls = ReinforceAgent

@@ -171,42 +171,50 @@ def _parse_args():
         '--agent',
         type=str,
         default="dqn",
-        choices=["dqn", "drqn"])
+        choices=["dqn", "drqn"],
+        help='Which agent to use. (default: %(default)s)')
 
     # special exploration params
     parser.add_argument(
         '--initial_epsilon',
         type=float,
-        default=0.5)
+        default=0.5,
+        help='DQN exploration: initial epsilon. (default: %(default)s)')
     parser.add_argument(
         '--final_epsilon',
         type=float,
-        default=0.01)
+        default=0.01,
+        help='DQN exploration: final epsilon at 0.8*epochs. (default: %(default)s)')
 
     parser.add_argument(
         '--copy_n_epoch',
         type=int,
-        default=5)
+        default=5,
+        help='Target DQN: copy parameters every %(default)s epoch')
 
     # special optimization params
     parser.add_argument(
         '--qvalue_lr',
         type=float,
-        default=1e-4)
+        default=1e-4,
+        help='Learning rate for qvalue network. (default: %(default)s)')
     parser.add_argument(
         '--value_lr',
         type=float,
-        default=1e-4)
+        default=1e-4,
+        help='Learning rate for value network. (default: %(default)s)')
 
     # agent special params & optimization
     parser.add_argument(
         '--target_dqn',
         action='store_true',
-        default=False)
+        default=False,
+        help='Flag for target network use.')
     parser.add_argument(
         '--dueling_dqn',
         action='store_true',
-        default=False)
+        default=False,
+        help='Flag for dueling network architecture use.')
 
     parser = typical_args(parser)
 

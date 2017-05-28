@@ -188,7 +188,8 @@ def _parse_args():
         '--agent',
         type=str,
         default="feed_forward",
-        choices=["feed_forward", "recurrent"])
+        choices=["feed_forward", "recurrent"],
+        help='Which agent to use. (default: %(default)s)')
 
     parser = typical_args(parser)
 
@@ -196,16 +197,19 @@ def _parse_args():
     parser.add_argument(
         '--policy_lr',
         type=float,
-        default=1e-4)
+        default=1e-4,
+        help='Learning rate for policy network. (default: %(default)s)')
     parser.add_argument(
         '--value_lr',
         type=float,
-        default=1e-4)
+        default=1e-4,
+        help='Learning rate for value network. (default: %(default)s)')
 
     parser.add_argument(
-        '--entropy_koef',
+        '--entropy_factor',
         type=float,
-        default=1e-2)
+        default=1e-2,
+        help='Entropy factor for policy network. (default: %(default)s)')
 
     args = parser.parse_args()
     return args
@@ -226,7 +230,7 @@ def main():
         **{"initial_lr": args.value_lr}
     }
     policy_net_params = {
-        "entropy_koef": args.entropy_koef
+        "entropy_factor": args.entropy_factor
     }
 
     agent_cls = A3CFFAgent if args.agent == "feed_forward" else A3CLstmAgent

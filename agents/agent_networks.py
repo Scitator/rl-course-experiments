@@ -53,16 +53,17 @@ class PolicyNet(object):
         self.predicted_probs_for_actions = tf.gather(
             tf.reshape(self.predicted_probs, [-1]), predicted_ids)
 
-        J = tf.reduce_mean(tf.log(self.predicted_probs_for_actions) * self.cumulative_rewards)
-        self.loss = -J  # * self.special.get("reward_koef", 1.0)
+        # yeah loss sum
+        J = tf.reduce_sum(tf.log(self.predicted_probs_for_actions) * self.cumulative_rewards)
+        self.loss = -J  # * self.special.get("reward_factor", 1.0)
 
         # a bit of regularization
         if self.special.get("entropy_loss", True):
-            H = tf.reduce_mean(
+            H = tf.reduce_sum(
                 tf.reduce_sum(
                     self.predicted_probs * tf.log(self.predicted_probs),
                     axis=-1))
-            self.loss += H * self.special.get("entropy_koef", 0.01)
+            self.loss += H * self.special.get("entropy_factor", 0.01)
 
     def _probs(self, hidden_state, scope, reuse=False):
         with tf.variable_scope(scope, reuse=reuse):
