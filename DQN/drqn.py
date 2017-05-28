@@ -8,7 +8,7 @@ from agents.agent_networks import FeatureNet, QvalueNet, ValueNet
 from agents.agent_states import RecurrentHiddenState
 
 
-class DqrnAgent(object):
+class DrqnAgent(object):
     def __init__(self, state_shape, n_actions, network, special=None):
         self.state_shape = state_shape
         self.n_actions = n_actions

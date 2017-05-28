@@ -135,10 +135,6 @@ def make_image_env_wrapper(params):
     return wrapper
 
 
-def make_env(env, n_games=1):
-    if n_games > 1:
-        return EnvPool(
-            gym.make(env).env,
-            n_games)
-    else:
-        return gym.make(env).env
+def make_env(env, n_games=1, limit=False):
+    env = gym.make(env) if limit else gym.make(env).env
+    return EnvPool(env, n_games) if n_games > 1 else env

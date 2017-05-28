@@ -12,7 +12,7 @@ from wrappers.gym_wrappers import make_env, make_image_env_wrapper
 
 
 def epsilon_greedy_policy(agent, sess, observations):
-    probs = agent.predict_action(sess, observations)
+    probs = agent.predict_probs(sess, observations)
     actions = [np.random.choice(len(row), p=row) for row in probs]
     return actions
 
@@ -102,7 +102,6 @@ def run_wrapper(
             saver.restore(sess, "{}/model.ckpt".format(log_dir))
 
         try:
-            # @TODO: still need to pass target_net
             history = learning_fn(
                 sess, agent, env,
                 update_fn=update_fn,
@@ -122,7 +121,7 @@ def run_wrapper(
         agent = create_agent(agent_cls, state_shape, n_actions, agent_agrs, use_target_network)
 
         env_name = env_name.replace("Deterministic", "")
-        env = make_env_fn(env_name, 1)
+        env = make_env_fn(env_name, 1, limit=True)
         monitor_dir = os.path.join(log_dir, "monitor")
         env = gym.wrappers.Monitor(env, monitor_dir, force=True)
 

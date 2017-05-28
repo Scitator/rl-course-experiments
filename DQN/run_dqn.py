@@ -1,12 +1,11 @@
 import argparse
 import numpy as np
 from tqdm import trange
-from tensorflow.contrib import rnn
 
 from rstools.utils.batch_utils import iterate_minibatches
 
 from DQN.dqn import DqnAgent
-from DQN.dqrn import DqrnAgent
+from DQN.drqn import DrqnAgent
 from agents.agent_networks import copy_model_parameters
 from agents.networks import activations
 from wrappers.gym_wrappers import Transition
@@ -82,7 +81,7 @@ def generate_sessions(
                 state=states, action=actions, reward=rewards, next_state=next_states, done=dones)
             total_qvalue_loss += update_fn(sess, agent, target_agent, transition)
 
-        if isinstance(agent, DqrnAgent):
+        if isinstance(agent, DrqnAgent):
             agent.update_belief_state(sess, states, dones)
 
         states = next_states
@@ -171,7 +170,7 @@ def _parse_args():
     parser.add_argument(
         '--agent',
         type=str,
-        choices=["dqn", "dqrn"])
+        choices=["dqn", "drqn"])
 
     # special exploration params
     parser.add_argument(
@@ -214,7 +213,6 @@ def _parse_args():
     return args
 
 
-# @TODO: where is epsilon?!
 def main():
     args = _parse_args()
 
@@ -240,7 +238,7 @@ def main():
         **{"initial_lr": args.value_lr}
     }
 
-    agent_cls = DqnAgent if args.agent == "dqn" else DqrnAgent
+    agent_cls = DqnAgent if args.agent == "dqn" else DrqnAgent
 
     special = {
         "dueling_network": args.dueling_dqn,
