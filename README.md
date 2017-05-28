@@ -39,9 +39,50 @@ For more information, look at folder readme.
 
 #### Special requirements
 
-For simple script running you need to install my additional [repo](https://github.com/Scitator/rstools) with some kind of optimization stuff for neural networks:
+For simple script running you need to install additional [repo](https://github.com/Scitator/rstools) with optimization stuff for neural networks:
 
 `pip install git+https://github.com/Scitator/rstools`
+
+#### Example usage
+
+DQN:
+
+`PYTHONPATH=. python DQN/run_dqn.py --plot_history 
+--feature_network linear --layers 16-16 --activation tanh --hidden_size 16 --hidden_activation tanh 
+--n_epochs 500 --n_games 32 --batch_size 32 --t_max 100  
+--qvalue_lr 0.00005 --feature_lr 0.00005 --value_lr 0.00005 --initial_epsilon 0.25 
+--api_key <paste_your_gym_api_key_here>`
+
+Reinforce:
+
+`PYTHONPATH=. python PG/run_reinforce.py --plot_history 
+--feature_network linear --layers 16-16 --activation tanh --hidden_size 16 --hidden_activation tanh 
+--n_epochs 3200 --n_games 32 --batch_size 32 --t_max 50 
+--entropy_factor 0.005 --policy_lr 0.00001 --feature_lr 0.00005 
+--api_key <paste_your_gym_api_key_here>`
+
+Feed-Forward Asynchronous Advantage Actor-Critic:
+
+`PYTHONPATH=. python A3C/run_a3c.py --plot_history 
+--feature_network linear --layers 16-16 --activation tanh --hidden_size 16 --hidden_activation tanh 
+--n_epochs 200 --n_games 32 --batch_size 32 --t_max 10 --policy_lr 0.000001 
+--api_key <paste_your_gym_api_key_here>`
+
+##### Metrics
+
+- loss - typical neural network loss
+- reward - typical environment reward, 
+but because Environment Pool is always used not very informative for now
+- steps - mean number of game ends per epoch session
+
+##### If you have linux with NVIDIA GPU and no X server, but want to try gym
+
+You need to reinstall NVIDIA drivers.
+
+[issue source](https://github.com/openai/gym/issues/366)
+[how-to guide](https://davidsanwald.github.io/2016/11/13/building-tensorflow-with-gpu-support.html)
+
+and add `xvfb start; DISPLAY=:1` before run command. 
 
 #### Contributing
 

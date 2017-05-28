@@ -6,6 +6,7 @@ from tqdm import trange
 
 from A3C.a3c_ff import A3CFFAgent
 from A3C.a3c_lstm import A3CLstmAgent
+from agents.networks import activations
 from wrappers.gym_wrappers import Transition
 from wrappers.run_wrappers import typical_args, typical_argsparse, run_wrapper, update_wraper, \
     epsilon_greedy_policy, play_session
@@ -237,9 +238,12 @@ def main():
 
     special = {
         "policy_net": policy_net_params,
+        "hidden_size": args.hidden_size,
+        "hidden_activation": activations[args.hidden_activation],
         "feature_net_optimization": optimization_params,
+        "hidden_state_optimization": optimization_params,
         "value_net_optimization": value_optimization_params,
-        "policy_net_optimiaztion": policy_optimization_params,
+        "policy_net_optimization": policy_optimization_params,
     }
 
     agent_args = {

@@ -187,11 +187,12 @@ def main():
     agent_cls = ReinforceAgent
 
     special = {
+        "policy_net": policy_net_params,
         "hidden_size": args.hidden_size,
         "hidden_activation": activations[args.hidden_activation],
-        "policy_net": policy_net_params,
         "feature_net_optimization": optimization_params,
-        "policy_net_optimiaztion": policy_optimization_params,
+        "hidden_state_optimization": optimization_params,
+        "policy_net_optimization": policy_optimization_params,
     }
 
     agent_args = {

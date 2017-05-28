@@ -255,8 +255,8 @@ def main():
         "hidden_activation": activations[args.hidden_activation],
         "feature_net_optimization": optimization_params,
         "hidden_state_optimization": optimization_params,
-        "value_net_optimiaztion": value_optimization_params,
-        "qvalue_net_optimiaztion": qvalue_optimization_params,
+        "value_net_optimization": value_optimization_params,
+        "qvalue_net_optimization": qvalue_optimization_params,
     }
 
     agent_args = {

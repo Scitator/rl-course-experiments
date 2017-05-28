@@ -70,6 +70,9 @@ def create_agent(agent_cls, state_shape, n_actions, agent_agrs, use_target_netwo
             state_shape, n_actions, **agent_agrs)
         agent = (agent, target_agent)
 
+    from pprint import pprint
+    pprint([(v.name, v.get_shape().as_list()) for v in tf.trainable_variables()])
+
     return agent
 
 
