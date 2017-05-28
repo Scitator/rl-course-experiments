@@ -35,12 +35,12 @@ def update(sess, agent, target_agent, transitions, init_state=None,
                     np.invert(dones).astype(np.float32) * \
                     discount_factor * qvalues_next_target
 
-        run_dict = [
+        run_params = [
             agent.qvalue_net.loss,
             agent.qvalue_net.train_op, agent.hidden_state.train_op, agent.feature_net.train_op
         ]
 
-        feed_dict = {
+        feed_params = {
             agent.feature_net.states: states,
             agent.feature_net.is_training: True,
             agent.qvalue_net.actions: actions,
@@ -49,14 +49,14 @@ def update(sess, agent, target_agent, transitions, init_state=None,
         }
 
         if agent.special.get("dueling_network", False):
-            run_dict[0] = agent.agent_loss
-            run_dict += [agent.value_net.train_op]
-            feed_dict[agent.value_net.td_target] = td_target  # @TODO: why need to feed?
-            feed_dict[agent.value_net.is_training] = True
+            run_params[0] = agent.agent_loss
+            run_params += [agent.value_net.train_op]
+            feed_params[agent.value_net.td_target] = td_target  # @TODO: why need to feed?
+            feed_params[agent.value_net.is_training] = True
 
         run_results = sess.run(
-            run_dict,
-            feed_dict=feed_dict)
+            run_params,
+            feed_dict=feed_params)
 
         batch_loss = run_results[0]
         loss += batch_loss
@@ -170,6 +170,7 @@ def _parse_args():
     parser.add_argument(
         '--agent',
         type=str,
+        default="dqn",
         choices=["dqn", "drqn"])
 
     # special exploration params

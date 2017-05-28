@@ -13,10 +13,8 @@ class DrqnAgent(object):
         self.state_shape = state_shape
         self.n_actions = n_actions
 
-        self.is_end = tf.placeholder(shape=[None], dtype=tf.bool, name="is_end")
-
         self.special = special
-        self.scope = special.get("scope", "dqrn")
+        self.scope = special.get("scope", "drqn")
 
         with tf.variable_scope(self.scope):
             self._build_graph(network)

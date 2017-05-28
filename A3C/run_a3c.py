@@ -1,13 +1,13 @@
 import argparse
 
 import numpy as np
-from rstools.utils.batch_utils import iterate_minibatches
+from rstools.utils.batch_utils import iterate_minibatches, merge_generators
 from tqdm import trange
 
 from A3C.a3c_ff import A3CFFAgent
 from A3C.a3c_lstm import A3CLstmAgent
-from wrappers import Transition
-from wrappers.run_wrapper import typical_args, typical_argsparse, run_wrapper, update_wraper, \
+from wrappers.gym_wrappers import Transition
+from wrappers.run_wrappers import typical_args, typical_argsparse, run_wrapper, update_wraper, \
     epsilon_greedy_policy, play_session
 
 
@@ -22,11 +22,11 @@ def update(sess, a3c_agent, transitions, initial_state=None,
 
     cumulative_reward = np.zeros_like(transitions[-1].reward) + \
                         np.invert(transitions[-1].done) * \
-                        a3c_agent.predict_value(sess, transitions[-1].next_state)
+                        a3c_agent.predict_values(sess, transitions[-1].next_state)
     for transition in reversed(transitions):
         cumulative_reward = reward_norm * transition.reward + \
                             np.invert(transition.done) * discount_factor * cumulative_reward
-        policy_target = cumulative_reward - a3c_agent.predict_value(sess, transition.state)
+        policy_target = cumulative_reward - a3c_agent.predict_values(sess, transition.state)
 
         value_targets.append(cumulative_reward)
         policy_targets.append(policy_target)
@@ -63,13 +63,15 @@ def update(sess, a3c_agent, transitions, initial_state=None,
         policy_target_axis = iterate_minibatches(policy_target_axis, batch_size)
         done_axis = iterate_minibatches(done_axis, batch_size)
 
-        for state_batch, action_batch, value_target, policy_target, done_batch in \
-                zip(state_axis, action_axis, value_target_axis, policy_target_axis, done_axis):
+        batch_generator = merge_generators(
+            [state_axis, action_axis, value_target_axis, policy_target_axis, done_axis])
+
+        for state_batch, action_batch, value_target, policy_target, done_batch in batch_generator:
             run_params = [
                  a3c_agent.policy_net.loss,
-                 a3c_agent.state_net.loss,
+                 a3c_agent.value_net.loss,
                  a3c_agent.policy_net.train_op,
-                 a3c_agent.state_net.train_op,
+                 a3c_agent.value_net.train_op,
                  a3c_agent.feature_net.train_op]
             feed_params = {
                 a3c_agent.feature_net.states: state_batch,
@@ -77,13 +79,14 @@ def update(sess, a3c_agent, transitions, initial_state=None,
                 a3c_agent.policy_net.actions: action_batch,
                 a3c_agent.policy_net.cumulative_rewards: policy_target,
                 a3c_agent.policy_net.is_training: True,
-                a3c_agent.state_net.td_target: value_target,
-                a3c_agent.state_net.is_training: True
+                a3c_agent.value_net.td_target: value_target,
+                a3c_agent.value_net.is_training: True
             }
+
             if isinstance(a3c_agent, A3CLstmAgent):
-                run_params += [a3c_agent.belief_update]
-                feed_params[a3c_agent.is_end] = done_batch
-            
+                run_params += [a3c_agent.hidden_state.belief_update]
+                feed_params[a3c_agent.hidden_state.is_end] = done_batch
+
             run_result = sess.run(
                 run_params,
                 feed_dict=feed_params)
@@ -184,6 +187,7 @@ def _parse_args():
     parser.add_argument(
         '--agent',
         type=str,
+        default="feed_forward",
         choices=["feed_forward", "recurrent"])
 
     parser = typical_args(parser)
@@ -203,7 +207,7 @@ def _parse_args():
         type=float,
         default=1e-2)
 
-    args = parser.parse_known_args()
+    args = parser.parse_args()
     return args
 
 
@@ -225,16 +229,19 @@ def main():
         "entropy_koef": args.entropy_koef
     }
 
-    agent_args = {
-        "n_games": args.n_games,
-        "network": network,
+    agent_cls = A3CFFAgent if args.agent == "feed_forward" else A3CLstmAgent
+
+    special = {
         "policy_net": policy_net_params,
         "feature_net_optimization": optimization_params,
-        "state_value_net_optimiaztion": value_optimization_params,
+        "value_net_optimization": value_optimization_params,
         "policy_net_optimiaztion": policy_optimization_params,
     }
 
-    agent_cls = A3CFFAgent if args.agent == "feed_forward" else A3CLstmAgent
+    agent_args = {
+        "network": network,
+        "special": special
+    }
 
     run(args.env, make_env_fn, agent_cls,
         run_args, update_args, agent_args,

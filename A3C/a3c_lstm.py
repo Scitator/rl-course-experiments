@@ -9,77 +9,57 @@ from agents.agent_states import RecurrentHiddenState, get_state_variables, get_s
 
 
 class A3CLstmAgent(object):
-    def __init__(self, state_shape, n_actions, network, cell, special=None):
+    def __init__(self, state_shape, n_actions, network, special=None):
         self.state_shape = state_shape
         self.n_actions = n_actions
-        self.cell_size = cell.state_size
-
-        self.is_end = tf.placeholder(shape=[None], dtype=tf.bool, name="is_end")
 
         self.special = special
         self.scope = special.get("scope", "a3c_lstm")
 
         with tf.variable_scope(self.scope):
-            self._build_graph(network, cell)
+            self._build_graph(network)
 
-    def _build_graph(self, network, cell):
+    def _build_graph(self, network):
         self.feature_net = FeatureNet(
             self.state_shape, network,
             self.special.get("feature_net", None))
 
-        n_games = tf.unstack(tf.shape(self.is_end))
-        with tf.variable_scope("belief_state"):
-            self.belief_state = get_state_variables(n_games, cell)
-            # very bad dark magic, need to refactor all of this
-            # supports only ine layer cell
-            self.belief_out = tf.placeholder(
-                tf.float32, [2, n_games, cell.output_size])
-            l = tf.unstack(self.belief_out, axis=0)
-            rnn_tuple_state = rnn.LSTMStateTuple(l[0], l[1])
-            self.belief_assign = get_state_update_op([self.belief_state], [rnn_tuple_state])
-
-        with tf.variable_scope("hidden_state"):
-            logits, rnn_states = tf.nn.dynamic_rnn(
-                cell, tf.expand_dims(self.feature_net.feature_state, 1),
-                sequence_length=[1] * n_games, initial_state=self.belief_state)
-
-        self.logits = tf.squeeze(logits, 1)
-
-        # @TODO: very hacky 2
-        self.belief_update = get_state_update_op([self.belief_state], [rnn_states], self.is_end)
+        self.hidden_state = RecurrentHiddenState(
+            self.feature_net.feature_state,
+            self.special.get("hidden_size", 512),
+            self.special.get("hidden_activation", tf.tanh),
+            self.special.get("batch_size", 1))
 
         self.policy_net = PolicyNet(
-            self.logits, self.n_actions,
+            self.hidden_state.state, self.n_actions,
             self.special.get("policy_net", {}))
-        self.state_net = ValueNet(
-            self.logits,
+        self.value_net = ValueNet(
+            self.hidden_state.state,
             self.special.get("value_net", {}))
 
         build_model_optimization(
             self.policy_net,
             self.special.get("policy_net_optimization", None))
         build_model_optimization(
-            self.state_net,
+            self.value_net,
             self.special.get("value_net_optimization", None))
         build_model_optimization(
+            self.hidden_state,
+            self.special.get("hidden_state_optimization", None),
+            loss=0.5 * (self.value_net.loss + self.policy_net.loss))
+        build_model_optimization(
             self.feature_net, self.special.get("feature_net_optimization", None),
-            loss=0.5 * (self.state_net.loss + self.policy_net.loss))
+            loss=0.5 * (self.value_net.loss + self.policy_net.loss))
 
-        self.hidden_optimizer, self.hidden_train_op = build_scope_optimization(
-            var_list=tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
-                                       scope=self.scope + "/hidden_state"),
-            optimization_params=self.special.get("feature_net_optimization", None),
-            loss=self.feature_net.loss)
-
-    def predict_value(self, sess, state_batch):
+    def predict_values(self, sess, state_batch):
         return sess.run(
-            self.state_net.predicted_values,
+            self.value_net.predicted_values_for_actions,
             feed_dict={
                 self.feature_net.states: state_batch,
                 self.feature_net.is_training: False
             })
 
-    def predict_action(self, sess, state_batch):
+    def predict_probs(self, sess, state_batch):
         return sess.run(
             self.policy_net.predicted_probs,
             feed_dict={
@@ -89,19 +69,19 @@ class A3CLstmAgent(object):
 
     def update_belief_state(self, sess, state_batch, done_batch):
         _ = sess.run(
-            self.belief_update,
+            self.hidden_state.belief_update,
             feed_dict={
                 self.feature_net.states: state_batch,
-                self.is_end: done_batch,
+                self.hidden_state.is_end: done_batch,
                 self.feature_net.is_training: False
             })
 
     def assign_belief_state(self, sess, new_belief):
         _ = sess.run(
-            self.belief_assign,
+            self.hidden_state.belief_assign,
             feed_dict={
-                self.belief_out: new_belief
+                self.hidden_state.belief_out: new_belief
             })
 
     def get_belief_state(self, sess):
-        return sess.run(self.belief_state)
+        return sess.run(self.hidden_state.belief_state)

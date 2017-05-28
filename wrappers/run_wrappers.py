@@ -106,14 +106,14 @@ def run_wrapper(
                 sess, agent, env,
                 update_fn=update_fn,
                 **run_args)
+
+            if plot_stats:
+                save_history(history, log_dir)
+                plotter_dir = os.path.join(log_dir, "plotter")
+                plot_all_metrics(history, save_dir=plotter_dir)
         except KeyboardInterrupt:
             print("Exiting training procedure")
         save_model(sess, saver, log_dir)
-
-    if plot_stats:
-        save_history(history, log_dir)
-        plotter_dir = os.path.join(log_dir, "plotter")
-        plot_all_metrics(history, save_dir=plotter_dir)
 
     if api_key is not None:
         tf.reset_default_graph()
@@ -245,7 +245,7 @@ def typical_args(parser):
     parser.add_argument(
         '--grad_clip',
         type=float,
-        default=5.0)
+        default=1.0)
 
     # update args
     parser.add_argument(
