@@ -42,16 +42,18 @@ def update(sess, a3c_agent, transitions, initial_state=None,
     done_history = np.array(done_history[::-1])
 
     if not time_major:
+        assert not isinstance(a3c_agent, A3CLstmAgent), "Please, use time_major flag for updates"
+
         state_history = state_history.swapaxes(0, 1)
         action_history = action_history.swapaxes(0, 1)
         done_history = done_history.swapaxes(0, 1)
         value_targets = value_targets.swapaxes(0, 1)
         policy_targets = policy_targets.swapaxes(0, 1)
 
-    time_len = state_history.shape[0]
-    if initial_state is not None:
+    if isinstance(a3c_agent, A3CLstmAgent):
         a3c_agent.assign_belief_state(sess, initial_state)
 
+    time_len = state_history.shape[0]
     value_loss, policy_loss = 0.0, 0.0
     for state_axis, action_axis, value_target_axis, policy_target_axis, done_axis in \
             zip(state_history, action_history, value_targets, policy_targets, done_history):
@@ -121,6 +123,10 @@ def generate_sessions(sess, a3c_agent, env_pool, t_max=1000, update_fn=None):
 
         transitions.append(Transition(
             state=states, action=actions, reward=rewards, next_state=next_states, done=dones))
+
+        if isinstance(a3c_agent, A3CLstmAgent):
+            a3c_agent.update_belief_state(sess, states, dones)
+
         states = next_states
 
         total_reward += rewards.mean()

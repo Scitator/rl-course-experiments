@@ -54,6 +54,10 @@ def update(sess, agent, target_agent, transitions, init_state=None,
             feed_params[agent.value_net.td_target] = td_target  # @TODO: why need to feed?
             feed_params[agent.value_net.is_training] = True
 
+        if isinstance(agent, DrqnAgent):
+            run_params += [agent.hidden_state.belief_update]
+            feed_params[agent.hidden_state.is_end] = dones
+
         run_results = sess.run(
             run_params,
             feed_dict=feed_params)
@@ -81,9 +85,6 @@ def generate_sessions(
                 state=states, action=actions, reward=rewards, next_state=next_states, done=dones)
             total_qvalue_loss += update_fn(sess, agent, target_agent, transition)
 
-        if isinstance(agent, DrqnAgent):
-            agent.update_belief_state(sess, states, dones)
-
         states = next_states
 
         total_reward += rewards.mean()
@@ -96,13 +97,13 @@ def dqn_learning(
         sess, agent, env, update_fn,
         n_epochs=1000, n_sessions=100, t_max=1000,
         initial_epsilon=0.5, final_epsilon=0.01,
-        target_dqn=False, copy_n_epoch=5):
+        use_target_net=False, copy_n_epoch=5):
     tr = trange(
         n_epochs,
         desc="",
         leave=True)
 
-    if target_dqn:
+    if use_target_net:
         agent, target_agent = agent
         # copy_model_parameters(sess, agent, target_agent)
     else:
@@ -133,14 +134,14 @@ def dqn_learning(
         if i < n_epochs_decay:
             epsilon -= (initial_epsilon - final_epsilon) / float(n_epochs_decay)
 
-        if target_dqn and (i + 1) % copy_n_epoch == 0:
+        if use_target_net and (i + 1) % copy_n_epoch == 0:
             copy_model_parameters(sess, agent, target_agent)
 
         desc = "\t".join(
             ["{} = {:.3f}".format(key, value[i]) for key, value in history.items()])
         tr.set_description(desc)
 
-    if target_dqn:
+    if use_target_net:
         copy_model_parameters(sess, agent, target_agent)
 
     return history
@@ -152,7 +153,7 @@ def run(env_name, make_env_fn, agent_cls,
         plot_stats=False, api_key=None,
         load=False, gpu_option=0.4,
         n_games=10,
-        target_dqn=False):
+        use_target_net=False):
     run_wrapper(
         n_games, dqn_learning, update_wraper(update, **update_args),
         play_session, epsilon_greedy_actions,
@@ -161,7 +162,7 @@ def run(env_name, make_env_fn, agent_cls,
         log_dir=log_dir,
         plot_stats=plot_stats, api_key=api_key,
         load=load, gpu_option=gpu_option,
-        use_target_network=target_dqn)
+        use_target_network=use_target_net)
 
 
 def _parse_args():
@@ -206,7 +207,7 @@ def _parse_args():
 
     # agent special params & optimization
     parser.add_argument(
-        '--target_dqn',
+        '--use_target_net',
         action='store_true',
         default=False,
         help='Flag for target network use.')
@@ -228,7 +229,7 @@ def main():
     network, run_args, update_args, optimization_params, make_env_fn = typical_argsparse(args)
 
     special_run_args = {
-        "target_dqn": args.target_dqn,
+        "use_target_net": args.use_target_net,
         "initial_epsilon": args.initial_epsilon,
         "final_epsilon": args.final_epsilon,
         "copy_n_epoch": args.copy_n_epoch
@@ -270,7 +271,7 @@ def main():
         args.plot_history, args.api_key,
         args.load, args.gpu_option,
         args.n_games,
-        args.target_dqn)
+        args.use_target_net)
 
 
 if __name__ == '__main__':

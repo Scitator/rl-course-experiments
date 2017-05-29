@@ -4,7 +4,7 @@
 This repository provides code implementations for popular Reinforcement Learning algorithms.
 
 Main idea was to generalise main RL algorithms and provide unified interface for testing them on any gym environment. 
-For example, now your can create your own Double Dueling Deep Recurrent Q-Learning agent (Let's name it, 3Drq). 
+For example, now your can create your own Double Dueling Deep Recurrent Q-Learning agent (Let's name it, 3DRQ). 
 For simplicity, all main agent blocks are in `agents` folder. 
 
 For now, repository is under after-course refactoring. So, many documentation needed.
@@ -103,7 +103,7 @@ Just follow PEP8 and make merge request.
 Yes, you here it right. We have a lot of RL algorithms, and even more gym environments to test them. 
 So, play a game, save
 * agent parameters (so anyone can reproduce)
-* agent itself (`model.ckpt`)
-* gym-link (main results)
+* agent itself (`model.ckpt*`)
 * plots (they will be automatically generated with `--plot_history` flag)
+* gym-link (main results)
 * make merge request (solutions should be at `field/solutions.md`, for example `DQN\solutions.md`)
