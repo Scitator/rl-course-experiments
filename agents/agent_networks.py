@@ -45,7 +45,7 @@ class PolicyNet(object):
         self.predicted_probs = self._probs(
             hidden_state,
             scope=self.relative_scope + "/probs",
-            reuse=self.special.get("reuse_probs", False))
+            reuse=self.special.get("reuse_probs", False)) + 1e-8
 
         batch_size = tf.shape(self.actions)[0]
         predicted_ids = tf.range(batch_size) * tf.shape(self.predicted_probs)[1] + self.actions
