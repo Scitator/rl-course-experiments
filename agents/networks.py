@@ -43,6 +43,7 @@ def convolution_network(
             x = activation_fn(x)
             if dropout > 0:
                 x = tf.layers.dropout(x, rate=dropout, training=is_training)
+        x = tf.contrib.layers.flatten(x)
         return x
 
 

@@ -114,7 +114,8 @@ class EnvPool(Wrapper):
 
 def make_image_env(
         env, n_games=1, width=64, height=64,
-        grayscale=True, crop=lambda img: img[60:-30, 7:]):
+        grayscale=True, crop=lambda img: img[60:-30, 7:], limit=False):
+    env = gym.make(env) if limit else gym.make(env).env
     if n_games > 1:
         return EnvPool(
             PreprocessImage(
@@ -130,8 +131,8 @@ def make_image_env(
 
 
 def make_image_env_wrapper(params):
-    def wrapper(env, n_games):
-        return make_image_env(env, n_games, **params)
+    def wrapper(env, n_games, limit=False):
+        return make_image_env(env, n_games, limit=limit, **params)
     return wrapper
 
 

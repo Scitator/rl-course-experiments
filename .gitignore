@@ -99,3 +99,4 @@ ENV/
 *.log
 
 solutions.md
+*.swp
