@@ -39,6 +39,10 @@ class DrqnAgent(object):
                 self.special.get("value_net", {}))
 
             # a bit hacky way
+            self.predicted_qvalues = self.value_net.predicted_values + \
+                                     self.qvalue_net.predicted_qvalues
+            self.predicted_qvalues_for_action = self.value_net.predicted_values_for_actions + \
+                                                self.qvalue_net.predicted_qvalues_for_actions
             self.agent_loss = tf.losses.mean_squared_error(
                 labels=self.qvalue_net.td_target,
                 predictions=self.value_net.predicted_values_for_actions +
@@ -52,6 +56,8 @@ class DrqnAgent(object):
             self.qvalue_net = QvalueNet(
                 self.hidden_state.state, self.n_actions,
                 self.special.get("qvalue_net", {}))
+            self.predicted_qvalues = self.qvalue_net.predicted_qvalues
+            self.predicted_qvalues_for_action = self.qvalue_net.predicted_qvalues_for_actions
             self.agent_loss = self.qvalue_net.loss
 
         build_model_optimization(
@@ -68,18 +74,11 @@ class DrqnAgent(object):
             loss=self.agent_loss)
 
     def predict_qvalues(self, sess, state_batch):
-        if self.special.get("dueling_network", False):
-            return sess.run(
-                self.value_net.predicted_values + self.qvalue_net.predicted_qvalues,
-                feed_dict={
-                    self.feature_net.states: state_batch,
-                    self.feature_net.is_training: False})
-        else:
-            return sess.run(
-                self.qvalue_net.predicted_qvalues,
-                feed_dict={
-                    self.feature_net.states: state_batch,
-                    self.feature_net.is_training: False})
+        return sess.run(
+            self.predicted_qvalues,
+            feed_dict={
+                self.feature_net.states: state_batch,
+                self.feature_net.is_training: False})
 
     def update_belief_state(self, sess, state_batch, done_batch):
         _ = sess.run(
