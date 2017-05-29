@@ -8,7 +8,7 @@ from rstools.utils.os_utils import save_history, save_model
 from rstools.visualization.plotter import plot_all_metrics
 
 from agents.networks import activations, networks, network_wrapper, str2params
-from wrappers.gym_wrappers import make_env, make_image_env_wrapper
+from wrappers.gym_wrappers import make_env, make_image_env, make_env_wrapper
 
 
 def epsilon_greedy_policy(agent, sess, observations):
@@ -321,6 +321,11 @@ def typical_args(parser):
         type=str,
         default="0-0-0-0",
         help='Image-based environments preprocessing, image corners splitted by \'-\'.')
+    parser.add_argument(
+        '--n_frames',
+        type=int,
+        default=1,
+        help='Number of memory frames to use. (default: %(default)s)')
 
     return parser
 
@@ -330,7 +335,7 @@ def typical_argsparse(args):
         network_args = {
             "layers": str2params(args.layers)
         }
-        make_env_fn = make_env
+        make_env_fn = make_env_wrapper(make_env, {"n_frames": args.n_frames})
     elif args.feature_network == "convolution":
         network_args = {
             "n_filters": str2params(args.n_filters),
@@ -344,10 +349,11 @@ def typical_argsparse(args):
             "width": args.image_width,
             "height": args.image_height,
             "grayscale": args.image_grayscale,
-            "crop": lambda img: img[image_crop_x1:image_crop_x2, image_crop_y1:image_crop_y2]
+            "crop": lambda img: img[image_crop_x1:image_crop_x2, image_crop_y1:image_crop_y2],
+            "n_frames": args.n_frames
         }
 
-        make_env_fn = make_image_env_wrapper(image_preprocessing_params)
+        make_env_fn = make_env_wrapper(make_image_env, image_preprocessing_params)
     else:
         raise NotImplemented()
 

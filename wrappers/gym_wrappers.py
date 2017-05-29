@@ -6,7 +6,6 @@ from gym.spaces.box import Box
 from copy import copy
 import collections
 
-
 Transition = collections.namedtuple(
     "Transition",
     ["state", "action", "reward", "next_state", "done"])
@@ -37,12 +36,26 @@ class PreprocessImage(ObservationWrapper):
 
 
 class FrameBuffer(Wrapper):
-    def __init__(self, env, n_frames=4, reshape_fn=lambda x: x):
+    def __init__(self, env, n_frames=4, reshape_fn=None):
         """A gym wrapper that returns last n_frames observations as a single observation.
         Useful for games like Atari and Doom with screen as input."""
         super(FrameBuffer, self).__init__(env)
+        self.framebuffer = np.zeros([n_frames, ] + list(env.observation_space.shape))
+
+        # now, hacky auto-reshape fn
+        if reshape_fn is None:
+            shape_dims = list(range(len(self.framebuffer.shape)))
+            shape_dims = shape_dims[1:] + [shape_dims[0]]
+
+            result_shape = list(env.observation_space.shape)
+            if len(result_shape) == 1:
+                # so, its linear env
+                result_shape += [1]
+            result_shape[-1] = result_shape[-1] * n_frames
+
+            reshape_fn = lambda x: np.transpose(x, shape_dims).reshape(result_shape)
+
         self.reshape_fn = reshape_fn
-        self.framebuffer = np.zeros([n_frames,]+list(env.observation_space.shape))
         self.observation_space = Box(0.0, 1.0, self.reshape_fn(self.framebuffer).shape)
 
     def reset(self):
@@ -66,6 +79,7 @@ class EnvPool(Wrapper):
     """
         Typical EnvPool, that does not care about done envs.
     """
+
     def __init__(self, env, n_envs=16):
         super(EnvPool, self).__init__(env)
         self.initial_env = env
@@ -87,7 +101,7 @@ class EnvPool(Wrapper):
         return new_states
 
     def step(self, actions):
-        new_states = np.zeros(shape=(self.n_envs, ) + tuple(self.env_shape), dtype=np.float32)
+        new_states = np.zeros(shape=(self.n_envs,) + tuple(self.env_shape), dtype=np.float32)
         rewards = np.zeros(shape=self.n_envs, dtype=np.float32)
         dones = np.ones(shape=self.n_envs, dtype=np.bool)
         for i, (action, env) in enumerate(zip(actions, self.envs)):
@@ -112,30 +126,25 @@ class EnvPool(Wrapper):
             return self.envs_states
 
 
-def make_image_env(
-        env, n_games=1, width=64, height=64,
-        grayscale=True, crop=lambda img: img[60:-30, 7:], limit=False):
+def make_env(env, n_games=1, limit=False, n_frames=1):
     env = gym.make(env) if limit else gym.make(env).env
-    if n_games > 1:
-        return EnvPool(
-            PreprocessImage(
-                env,
-                width=width, height=height, grayscale=grayscale,
-                crop=crop),
-            n_games)
-    else:
-        return PreprocessImage(
-            env,
-            width=width, height=height, grayscale=grayscale,
-            crop=crop)
-
-
-def make_image_env_wrapper(params):
-    def wrapper(env, n_games, limit=False):
-        return make_image_env(env, n_games, limit=limit, **params)
-    return wrapper
-
-
-def make_env(env, n_games=1, limit=False):
-    env = gym.make(env) if limit else gym.make(env).env
+    env = FrameBuffer(env, n_frames=n_frames) if n_frames > 1 else env
     return EnvPool(env, n_games) if n_games > 1 else env
+
+
+def make_image_env(
+        env, n_games=1, limit=False,
+        n_frames=1,
+        width=64, height=64,
+        grayscale=True, crop=lambda img: img[60:-30, 7:], ):
+    env = gym.make(env) if limit else gym.make(env).env
+    env = PreprocessImage(env, width=width, height=height, grayscale=grayscale, crop=crop)
+    env = FrameBuffer(env, n_frames=n_frames) if n_frames > 1 else env
+    return EnvPool(env, n_games) if n_games > 1 else env
+
+
+def make_env_wrapper(make_env_fn, params):
+    def wrapper(env, n_games, limit=False):
+        return make_env_fn(env, n_games, limit=limit, **params)
+
+    return wrapper
