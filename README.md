@@ -88,7 +88,7 @@ You need to reinstall NVIDIA drivers.
 [issue source](https://github.com/openai/gym/issues/366)
 [how-to guide](https://davidsanwald.github.io/2016/11/13/building-tensorflow-with-gpu-support.html)
 
-and add `xvfb start; DISPLAY=:1` before run command. 
+and add `bash xvfb start; DISPLAY=:1` before run command. 
 
 #### Contributing
 
@@ -106,4 +106,4 @@ So, play a game, save
 * agent itself (`model.ckpt*`)
 * plots (they will be automatically generated with `--plot_history` flag)
 * gym-link (main results)
-* make merge request (solutions should be at `field/solutions.md`, for example `DQN\solutions.md`)
+* make merge request (solutions should be at `field/solutions.md`, for example `DQN/solutions.md`)
