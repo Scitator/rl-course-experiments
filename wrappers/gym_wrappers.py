@@ -3,8 +3,16 @@ from scipy.misc import imresize
 import gym
 from gym.core import ObservationWrapper, Wrapper
 from gym.spaces.box import Box
+from gym.wrappers import SkipWrapper
 from copy import copy
 import collections
+
+try:
+    import ppaquette_gym_doom
+    from ppaquette_gym_doom.wrappers.action_space import ToDiscrete
+except ImportError:
+    print("no doom envs")
+
 
 Transition = collections.namedtuple(
     "Transition",
@@ -12,15 +20,15 @@ Transition = collections.namedtuple(
 
 
 class PreprocessImage(ObservationWrapper):
-    def __init__(self, env, height=64, width=64, grayscale=True,
-                 crop=lambda img: img):
+    def __init__(self, env, height=64, width=64, grayscale=True, crop=None):
         """
         A gym wrapper that crops, scales image into the desired shapes and optionally grayscales it.
         """
         super(PreprocessImage, self).__init__(env)
         self.img_size = (height, width)
         self.grayscale = grayscale
-        self.crop = crop
+        no_crop = lambda img: img
+        self.crop = crop or no_crop 
 
         n_colors = 1 if self.grayscale else 3
         self.observation_space = Box(0.0, 1.0, [height, width, n_colors])
@@ -126,18 +134,20 @@ class EnvPool(Wrapper):
             return self.envs_states
 
 
-def make_env(env, n_games=1, limit=False, n_frames=1):
-    env = gym.make(env) if limit else gym.make(env).env
+def make_env(env_name, n_games=1, limit=False, n_frames=1):
+    env = gym.make(env_name) if limit else gym.make(env_name).env
     env = FrameBuffer(env, n_frames=n_frames) if n_frames > 1 else env
     return EnvPool(env, n_games) if n_games > 1 else env
 
 
 def make_image_env(
-        env, n_games=1, limit=False,
+        env_name, n_games=1, limit=False,
         n_frames=1,
         width=64, height=64,
-        grayscale=True, crop=lambda img: img[60:-30, 7:], ):
-    env = gym.make(env) if limit else gym.make(env).env
+        grayscale=True, crop=None):
+    env = gym.make(env_name) if limit else gym.make(env_name).env
+    if "ppaquette" in env_name:
+        env = SkipWrapper(4)(ToDiscrete("minimal")(env))
     env = PreprocessImage(env, width=width, height=height, grayscale=grayscale, crop=crop)
     env = FrameBuffer(env, n_frames=n_frames) if n_frames > 1 else env
     return EnvPool(env, n_games) if n_games > 1 else env

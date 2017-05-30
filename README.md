@@ -100,7 +100,7 @@ Just follow PEP8 and make merge request.
 
 ##### ...or play a game
 
-Yes, you here it right. We have a lot of RL algorithms, and even more gym environments to test them. 
+We have a lot of RL algorithms, and even more gym environments to test them. 
 So, play a game, save
 * agent parameters (so anyone can reproduce)
 * agent itself (`model.ckpt*`)

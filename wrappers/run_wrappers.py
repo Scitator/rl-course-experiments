@@ -10,6 +10,11 @@ from rstools.visualization.plotter import plot_all_metrics
 from agents.networks import activations, networks, network_wrapper, str2params
 from wrappers.gym_wrappers import make_env, make_image_env, make_env_wrapper
 
+try:
+    import ppaquette_gym_doom
+except ImportError:
+    print("no doom envs")
+
 
 def epsilon_greedy_policy(agent, sess, observations):
     probs = agent.predict_probs(sess, observations)
@@ -319,7 +324,7 @@ def typical_args(parser):
     parser.add_argument(
         '--image_corners',
         type=str,
-        default="0-0-0-0",
+        default=None,
         help='Image-based environments preprocessing, image corners splitted by \'-\'.')
     parser.add_argument(
         '--n_frames',
@@ -343,13 +348,18 @@ def typical_argsparse(args):
             "strides": str2params(args.strides)
         }
 
-        image_crop_x1, image_crop_x2, image_crop_y1, image_crop_y2 = str2params(args.image_corners)
+        corners = str2params(args.image_corners)
+        if corners is not None:
+            image_crop_x1, image_crop_x2, image_crop_y1, image_crop_y2 = corners
+            crop_fn = lambda img: img[image_crop_x1:image_crop_x2, image_crop_y1:image_crop_y2]
+        else:
+            crop_fn = None
 
         image_preprocessing_params = {
             "width": args.image_width,
             "height": args.image_height,
             "grayscale": args.image_grayscale,
-            "crop": lambda img: img[image_crop_x1:image_crop_x2, image_crop_y1:image_crop_y2],
+            "crop": crop_fn,
             "n_frames": args.n_frames
         }
 
