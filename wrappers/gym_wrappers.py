@@ -95,43 +95,38 @@ class EnvPool(Wrapper):
         self.env_shape = env.observation_space.shape
         self.envs = []
         self.recreate_envs()
-        self.envs_states = None
+        self.reset()
 
     def recreate_envs(self):
         self.close()
         self.envs = np.array([copy(self.initial_env) for _ in range(self.n_envs)])
 
     def reset(self):
-        new_states = np.zeros(shape=[self.n_envs, ] + list(self.env_shape), dtype=np.float32)
+        self._states = np.zeros(shape=(self.n_envs,) + tuple(self.env_shape), dtype=np.float32)
+        self._rewards = np.zeros(shape=self.n_envs, dtype=np.float32)
+        self._dones = np.zeros(shape=self.n_envs, dtype=np.bool)
         for i, env in enumerate(self.envs):
-            new_states[i] = env.reset()
-        self.envs_states = new_states
-        return new_states
+            self._states[i] = env.reset()
+        return self._states.copy()
 
     def step(self, actions):
-        new_states = np.zeros(shape=(self.n_envs,) + tuple(self.env_shape), dtype=np.float32)
-        rewards = np.zeros(shape=self.n_envs, dtype=np.float32)
-        dones = np.ones(shape=self.n_envs, dtype=np.bool)
+
         for i, (action, env) in enumerate(zip(actions, self.envs)):
             new_s, r, done, _ = env.step(action)
-            rewards[i] = r
-            dones[i] = done
+            self._rewards[i] = r
+            self._dones[i] = done
             if not done:
-                new_states[i] = new_s
+                self._states[i] = new_s
             else:
-                new_states[i] = env.reset()
-        self.envs_states = new_states
-        return new_states, rewards, dones, None
+                self._states[i] = env.reset()
+        return self._states.copy(), self._rewards.copy(), self._dones.copy(), None
 
     def close(self):
         for env in self.envs:
             env.close()
 
     def pool_states(self):
-        if self.envs_states is None:
-            return self.reset()
-        else:
-            return self.envs_states
+        return self._states.copy()
 
 
 def make_env(env_name, n_games=1, limit=False, n_frames=1):

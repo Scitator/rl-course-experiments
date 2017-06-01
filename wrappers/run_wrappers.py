@@ -4,7 +4,7 @@ import string
 import gym
 import numpy as np
 import tensorflow as tf
-from rstools.utils.os_utils import save_history, save_model
+from rstools.utils.os_utils import save_history, save_model, create_if_need
 from rstools.visualization.plotter import plot_all_metrics
 
 from agents.networks import activations, networks, network_wrapper, str2params
@@ -33,7 +33,7 @@ def epsilon_greedy_actions(agent, sess, observations, epsilon=0.01):
     return actions
 
 
-def play_session(sess, agent, env, t_max=int(1e10), action_fn=None):
+def play_session(sess, agent, env, action_fn, t_max=int(1e10)):
     total_reward = 0
 
     s = env.reset()
@@ -55,9 +55,9 @@ def play_session(sess, agent, env, t_max=int(1e10), action_fn=None):
 def update_wraper(
         update_fn,
         discount_factor=0.99, reward_norm=1.0, batch_size=32, time_major=False):
-    def wrapper(sess, a3c_agent, transitions, init_state=None):
+    def wrapper(*args):
         return update_fn(
-            sess, a3c_agent, transitions, init_state,
+            *args,
             discount_factor=discount_factor, reward_norm=reward_norm,
             batch_size=batch_size, time_major=time_major)
 
@@ -98,25 +98,26 @@ def run_wrapper(
     agent_agrs["special"]["batch_size"] = n_games
     agent = create_agent(agent_cls, state_shape, n_actions, agent_agrs, use_target_network)
 
-    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
+    log_dir = log_dir or "./logs_" + env_name.replace(string.punctuation, "_")
+    create_if_need(log_dir)
 
+    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-        saver = tf.train.Saver()
-        log_dir = log_dir or "./logs_" + env_name.replace(string.punctuation, "_")
+        saver = tf.train.Saver(keep_checkpoint_every_n_hours=1)
 
         if not load:
             sess.run(tf.global_variables_initializer())
         else:
             saver.restore(sess, "{}/model.ckpt".format(log_dir))
 
+        save_model(sess, saver, log_dir)
         try:
             history = learning_fn(
                 sess, agent, env,
                 update_fn=update_fn,
                 **run_args)
-
+            save_history(history, log_dir)
             if plot_stats:
-                save_history(history, log_dir)
                 plotter_dir = os.path.join(log_dir, "plotter")
                 plot_all_metrics(history, save_dir=plotter_dir)
         except KeyboardInterrupt:
@@ -262,7 +263,7 @@ def typical_args(parser):
     parser.add_argument(
         '--feature_lr',
         type=float,
-        default=1e-3,
+        default=1e-5,
         help='Learning rate for feature network. (default: %(default)s)')
     parser.add_argument(
         '--lr_decay_steps',

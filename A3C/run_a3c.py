@@ -41,14 +41,14 @@ def update(sess, a3c_agent, transitions, initial_state=None,
     action_history = np.array(action_history[::-1])
     done_history = np.array(done_history[::-1])
 
-    if not time_major:
-        assert not isinstance(a3c_agent, A3CLstmAgent), "Please, use time_major flag for updates"
-
-        state_history = state_history.swapaxes(0, 1)
-        action_history = action_history.swapaxes(0, 1)
-        done_history = done_history.swapaxes(0, 1)
-        value_targets = value_targets.swapaxes(0, 1)
-        policy_targets = policy_targets.swapaxes(0, 1)
+    # if not time_major:
+    #     assert not isinstance(a3c_agent, A3CLstmAgent), "Please, use time_major flag for updates"
+    #
+    #     state_history = state_history.swapaxes(0, 1)
+    #     action_history = action_history.swapaxes(0, 1)
+    #     done_history = done_history.swapaxes(0, 1)
+    #     value_targets = value_targets.swapaxes(0, 1)
+    #     policy_targets = policy_targets.swapaxes(0, 1)
 
     if isinstance(a3c_agent, A3CLstmAgent):
         a3c_agent.assign_belief_state(sess, initial_state)
@@ -106,9 +106,8 @@ def update(sess, a3c_agent, transitions, initial_state=None,
     return policy_loss / time_len, value_loss / time_len
 
 
-def generate_sessions(sess, a3c_agent, env_pool, t_max=1000, update_fn=None):
+def generate_sessions(sess, a3c_agent, env_pool, update_fn, t_max=1000):
     total_reward = 0.0
-    total_policy_loss, total_value_loss = 0, 0
     total_games = 0.0
 
     transitions = []
@@ -132,14 +131,13 @@ def generate_sessions(sess, a3c_agent, env_pool, t_max=1000, update_fn=None):
         total_reward += rewards.mean()
         total_games += dones.sum()
 
-    if update_fn is not None:
-        total_policy_loss, total_value_loss = update_fn(sess, a3c_agent, transitions, init_state)
+    total_policy_loss, total_value_loss = update_fn(sess, a3c_agent, transitions, init_state)
 
     return total_reward, total_policy_loss, total_value_loss, total_games
 
 
 def a3c_learning(
-        sess, a3c_agent, env, update_fn,
+        sess, agent, env, update_fn,
         n_epochs=1000, n_sessions=100, t_max=1000):
     tr = trange(
         n_epochs,
@@ -155,7 +153,7 @@ def a3c_learning(
 
     for i in tr:
         sessions = [
-            generate_sessions(sess, a3c_agent, env, t_max, update_fn=update_fn)
+            generate_sessions(sess, agent, env, update_fn, t_max)
             for _ in range(n_sessions)]
         session_rewards, session_policy_loss, session_value_loss, session_steps = \
             map(np.array, zip(*sessions))
@@ -204,12 +202,12 @@ def _parse_args():
     parser.add_argument(
         '--policy_lr',
         type=float,
-        default=1e-4,
+        default=1e-5,
         help='Learning rate for policy network. (default: %(default)s)')
     parser.add_argument(
         '--value_lr',
         type=float,
-        default=1e-4,
+        default=1e-5,
         help='Learning rate for value network. (default: %(default)s)')
 
     parser.add_argument(
@@ -224,6 +222,8 @@ def _parse_args():
 
 def main():
     args = _parse_args()
+
+    assert args.time_major, "Please, use time_major flag for updates"
 
     network, run_args, update_args, optimization_params, make_env_fn = typical_argsparse(args)
 

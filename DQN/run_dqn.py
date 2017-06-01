@@ -68,9 +68,8 @@ def update(sess, agent, target_agent, transitions, init_state=None,
 
 
 def generate_sessions(
-        sess, agent, target_agent, env_pool,
-        t_max=1000, epsilon=0.01,
-        update_fn=None):
+        sess, agent, target_agent, env_pool, update_fn,
+        t_max=1000, epsilon=0.01):
     total_reward = 0.0
     total_qvalue_loss = 0.0
     total_games = 0.0
@@ -80,10 +79,9 @@ def generate_sessions(
         actions = epsilon_greedy_actions(agent, sess, states, epsilon=epsilon)
         next_states, rewards, dones, _ = env_pool.step(actions)
 
-        if update_fn is not None:
-            transition = Transition(
-                state=states, action=actions, reward=rewards, next_state=next_states, done=dones)
-            total_qvalue_loss += update_fn(sess, agent, target_agent, transition)
+        transition = Transition(
+            state=states, action=actions, reward=rewards, next_state=next_states, done=dones)
+        total_qvalue_loss += update_fn(sess, agent, target_agent, transition)
 
         states = next_states
 
@@ -122,7 +120,7 @@ def dqn_learning(
     for i in tr:
         sessions = [
             generate_sessions(
-                sess, agent, target_agent, env, t_max, epsilon=epsilon, update_fn=update_fn)
+                sess, agent, target_agent, env, update_fn, t_max=t_max, epsilon=epsilon)
             for _ in range(n_sessions)]
         session_rewards, session_qvalue_loss, session_steps = map(np.array, zip(*sessions))
 
@@ -155,7 +153,8 @@ def run(env_name, make_env_fn, agent_cls,
         n_games=10,
         use_target_net=False):
     run_wrapper(
-        n_games, dqn_learning, update_wraper(update, **update_args),
+        n_games, dqn_learning,
+        update_wraper(update, **update_args),
         play_session, epsilon_greedy_actions,
         env_name, make_env_fn, agent_cls,
         run_args, agent_agrs,
@@ -197,12 +196,12 @@ def _parse_args():
     parser.add_argument(
         '--qvalue_lr',
         type=float,
-        default=1e-4,
+        default=1e-5,
         help='Learning rate for qvalue network. (default: %(default)s)')
     parser.add_argument(
         '--value_lr',
         type=float,
-        default=1e-4,
+        default=1e-5,
         help='Learning rate for value network. (default: %(default)s)')
 
     # agent special params & optimization
