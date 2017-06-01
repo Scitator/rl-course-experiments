@@ -53,12 +53,11 @@ def play_session(sess, agent, env, action_fn, t_max=int(1e10)):
 
 
 def update_wraper(
-        update_fn, make_sess_feed_fn,
+        update_fn,
         discount_factor=0.99, reward_norm=1.0, batch_size=32, time_major=False):
     def wrapper(*args):
         return update_fn(
             *args,
-            make_sess_feed_fn=make_sess_feed_fn,
             discount_factor=discount_factor, reward_norm=reward_norm,
             batch_size=batch_size, time_major=time_major)
 
@@ -84,8 +83,8 @@ def create_agent(agent_cls, state_shape, n_actions, agent_agrs, use_target_netwo
 
 def run_wrapper(
         n_games, learning_fn, update_fn, play_fn, action_fn,
-        env_name, make_env_fn, agent_cls, agent2params_fn,
-        run_args, agent_agrs, update_args,
+        env_name, make_env_fn, agent_cls,
+        run_args, agent_agrs,
         log_dir=None,
         plot_stats=False, api_key=None,
         load=False, gpu_option=0.4,
@@ -98,8 +97,6 @@ def run_wrapper(
     # hack, I know
     agent_agrs["special"]["batch_size"] = n_games
     agent = create_agent(agent_cls, state_shape, n_actions, agent_agrs, use_target_network)
-
-    update_fn = update_wraper(update_fn, agent2params_fn(agent), **update_args)
 
     log_dir = log_dir or "./logs_" + env_name.replace(string.punctuation, "_")
     create_if_need(log_dir)

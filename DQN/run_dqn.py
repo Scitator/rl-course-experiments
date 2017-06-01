@@ -13,88 +13,7 @@ from wrappers.run_wrappers import typical_args, typical_argsparse, run_wrapper, 
     epsilon_greedy_actions, play_session
 
 
-# @TODO: rewtire this madness
-def agent2params(init_agent):
-    if isinstance(init_agent, DqnAgent):
-        if init_agent.special.get("dueling_network", False):
-            def make_sess_feed_fn(agent, states, actions, dones, td_target):
-                run_params = [
-                    agent.agent_loss,
-                    agent.qvalue_net.train_op,
-                    agent.value_net.train_op,
-                    agent.hidden_state.train_op,
-                    agent.feature_net.train_op
-                ]
-                feed_params = {
-                    agent.feature_net.states: states,
-                    agent.feature_net.is_training: True,
-                    agent.qvalue_net.actions: actions,
-                    agent.qvalue_net.td_target: td_target,
-                    agent.qvalue_net.is_training: True,
-                    agent.value_net.td_target: td_target,
-                    agent.value_net.is_training: True
-                }
-                return run_params, feed_params
-        else:
-            def make_sess_feed_fn(agent, states, actions, dones, td_target):
-                run_params = [
-                    agent.qvalue_net.loss,
-                    agent.qvalue_net.train_op,
-                    agent.hidden_state.train_op,
-                    agent.feature_net.train_op
-                ]
-                feed_params = {
-                    agent.feature_net.states: states,
-                    agent.feature_net.is_training: True,
-                    agent.qvalue_net.actions: actions,
-                    agent.qvalue_net.td_target: td_target,
-                    agent.qvalue_net.is_training: True
-                }
-                return run_params, feed_params
-    elif isinstance(init_agent, DrqnAgent):
-        if init_agent.special.get("dueling_network", False):
-            def make_sess_feed_fn(agent, states, actions, dones, td_target):
-                run_params = [
-                    agent.agent_loss,
-                    agent.qvalue_net.train_op,
-                    agent.value_net.train_op,
-                    agent.hidden_state.train_op,
-                    agent.feature_net.train_op,
-                    agent.hidden_state.belief_update
-                ]
-                feed_params = {
-                    agent.feature_net.states: states,
-                    agent.feature_net.is_training: True,
-                    agent.qvalue_net.actions: actions,
-                    agent.qvalue_net.td_target: td_target,
-                    agent.qvalue_net.is_training: True,
-                    agent.value_net.td_target: td_target,
-                    agent.value_net.is_training: True,
-                    agent.hidden_state.is_end: dones
-                }
-                return run_params, feed_params
-        else:
-            def make_sess_feed_fn(agent, states, actions, dones, td_target):
-                run_params = [
-                    agent.qvalue_net.loss,
-                    agent.qvalue_net.train_op,
-                    agent.hidden_state.train_op,
-                    agent.feature_net.train_op,
-                    agent.hidden_state.belief_update
-                ]
-                feed_params = {
-                    agent.feature_net.states: states,
-                    agent.feature_net.is_training: True,
-                    agent.qvalue_net.actions: actions,
-                    agent.qvalue_net.td_target: td_target,
-                    agent.qvalue_net.is_training: True,
-                    agent.hidden_state.is_end: dones
-                }
-                return run_params, feed_params
-    return make_sess_feed_fn
-
-
-def update(sess, agent, target_agent, transitions, init_state=None, make_sess_feed_fn=None,
+def update(sess, agent, target_agent, transitions, init_state=None,
            discount_factor=0.99, reward_norm=1.0, batch_size=32, time_major=False):
     loss = 0.0
     time_len = transitions.state.shape[0]
@@ -116,30 +35,28 @@ def update(sess, agent, target_agent, transitions, init_state=None, make_sess_fe
                     np.invert(dones).astype(np.float32) * \
                     discount_factor * qvalues_next_target
 
-        run_params, feed_params = make_sess_feed_fn(agent, states, actions, dones, td_target)
+        run_params = [
+            agent.qvalue_net.loss,
+            agent.qvalue_net.train_op, agent.hidden_state.train_op, agent.feature_net.train_op
+        ]
 
-        # run_params = [
-        #     agent.qvalue_net.loss,
-        #     agent.qvalue_net.train_op, agent.hidden_state.train_op, agent.feature_net.train_op
-        # ]
-        #
-        # feed_params = {
-        #     agent.feature_net.states: states,
-        #     agent.feature_net.is_training: True,
-        #     agent.qvalue_net.actions: actions,
-        #     agent.qvalue_net.td_target: td_target,
-        #     agent.qvalue_net.is_training: True,
-        # }
-        #
-        # if agent.special.get("dueling_network", False):
-        #     run_params[0] = agent.agent_loss
-        #     run_params += [agent.value_net.train_op]
-        #     feed_params[agent.value_net.td_target] = td_target  # @TODO: why need to feed?
-        #     feed_params[agent.value_net.is_training] = True
-        #
-        # if isinstance(agent, DrqnAgent):
-        #     run_params += [agent.hidden_state.belief_update]
-        #     feed_params[agent.hidden_state.is_end] = dones
+        feed_params = {
+            agent.feature_net.states: states,
+            agent.feature_net.is_training: True,
+            agent.qvalue_net.actions: actions,
+            agent.qvalue_net.td_target: td_target,
+            agent.qvalue_net.is_training: True,
+        }
+
+        if agent.special.get("dueling_network", False):
+            run_params[0] = agent.agent_loss
+            run_params += [agent.value_net.train_op]
+            feed_params[agent.value_net.td_target] = td_target  # @TODO: why need to feed?
+            feed_params[agent.value_net.is_training] = True
+
+        if isinstance(agent, DrqnAgent):
+            run_params += [agent.hidden_state.belief_update]
+            feed_params[agent.hidden_state.is_end] = dones
 
         run_results = sess.run(
             run_params,
@@ -237,10 +154,10 @@ def run(env_name, make_env_fn, agent_cls,
         use_target_net=False):
     run_wrapper(
         n_games, dqn_learning,
-        update,
+        update_wraper(update, **update_args),
         play_session, epsilon_greedy_actions,
-        env_name, make_env_fn, agent_cls, agent2params,
-        run_args, agent_agrs, update_args,
+        env_name, make_env_fn, agent_cls,
+        run_args, agent_agrs,
         log_dir=log_dir,
         plot_stats=plot_stats, api_key=api_key,
         load=load, gpu_option=gpu_option,
