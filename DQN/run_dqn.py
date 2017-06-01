@@ -13,7 +13,88 @@ from wrappers.run_wrappers import typical_args, typical_argsparse, run_wrapper, 
     epsilon_greedy_actions, play_session
 
 
-def update(sess, agent, target_agent, transitions, init_state=None,
+# @TODO: rewtire this madness
+def agent2params(init_agent):
+    if isinstance(init_agent, DqnAgent):
+        if init_agent.special.get("dueling_network", False):
+            def make_sess_feed_fn(agent, states, actions, dones, td_target):
+                run_params = [
+                    agent.agent_loss,
+                    agent.qvalue_net.train_op,
+                    agent.value_net.train_op,
+                    agent.hidden_state.train_op,
+                    agent.feature_net.train_op
+                ]
+                feed_params = {
+                    agent.feature_net.states: states,
+                    agent.feature_net.is_training: True,
+                    agent.qvalue_net.actions: actions,
+                    agent.qvalue_net.td_target: td_target,
+                    agent.qvalue_net.is_training: True,
+                    agent.value_net.td_target: td_target,
+                    agent.value_net.is_training: True
+                }
+                return run_params, feed_params
+        else:
+            def make_sess_feed_fn(agent, states, actions, dones, td_target):
+                run_params = [
+                    agent.qvalue_net.loss,
+                    agent.qvalue_net.train_op,
+                    agent.hidden_state.train_op,
+                    agent.feature_net.train_op
+                ]
+                feed_params = {
+                    agent.feature_net.states: states,
+                    agent.feature_net.is_training: True,
+                    agent.qvalue_net.actions: actions,
+                    agent.qvalue_net.td_target: td_target,
+                    agent.qvalue_net.is_training: True
+                }
+                return run_params, feed_params
+    elif isinstance(init_agent, DrqnAgent):
+        if init_agent.special.get("dueling_network", False):
+            def make_sess_feed_fn(agent, states, actions, dones, td_target):
+                run_params = [
+                    agent.agent_loss,
+                    agent.qvalue_net.train_op,
+                    agent.value_net.train_op,
+                    agent.hidden_state.train_op,
+                    agent.feature_net.train_op,
+                    agent.hidden_state.belief_update
+                ]
+                feed_params = {
+                    agent.feature_net.states: states,
+                    agent.feature_net.is_training: True,
+                    agent.qvalue_net.actions: actions,
+                    agent.qvalue_net.td_target: td_target,
+                    agent.qvalue_net.is_training: True,
+                    agent.value_net.td_target: td_target,
+                    agent.value_net.is_training: True,
+                    agent.hidden_state.is_end: dones
+                }
+                return run_params, feed_params
+        else:
+            def make_sess_feed_fn(agent, states, actions, dones, td_target):
+                run_params = [
+                    agent.qvalue_net.loss,
+                    agent.qvalue_net.train_op,
+                    agent.hidden_state.train_op,
+                    agent.feature_net.train_op,
+                    agent.hidden_state.belief_update
+                ]
+                feed_params = {
+                    agent.feature_net.states: states,
+                    agent.feature_net.is_training: True,
+                    agent.qvalue_net.actions: actions,
+                    agent.qvalue_net.td_target: td_target,
+                    agent.qvalue_net.is_training: True,
+                    agent.hidden_state.is_end: dones
+                }
+                return run_params, feed_params
+    return make_sess_feed_fn
+
+
+def update(sess, agent, target_agent, transitions, init_state=None, make_sess_feed_fn=None,
            discount_factor=0.99, reward_norm=1.0, batch_size=32, time_major=False):
     loss = 0.0
     time_len = transitions.state.shape[0]
@@ -35,28 +116,30 @@ def update(sess, agent, target_agent, transitions, init_state=None,
                     np.invert(dones).astype(np.float32) * \
                     discount_factor * qvalues_next_target
 
-        run_params = [
-            agent.qvalue_net.loss,
-            agent.qvalue_net.train_op, agent.hidden_state.train_op, agent.feature_net.train_op
-        ]
+        run_params, feed_params = make_sess_feed_fn(agent, states, actions, dones, td_target)
 
-        feed_params = {
-            agent.feature_net.states: states,
-            agent.feature_net.is_training: True,
-            agent.qvalue_net.actions: actions,
-            agent.qvalue_net.td_target: td_target,
-            agent.qvalue_net.is_training: True,
-        }
-
-        if agent.special.get("dueling_network", False):
-            run_params[0] = agent.agent_loss
-            run_params += [agent.value_net.train_op]
-            feed_params[agent.value_net.td_target] = td_target  # @TODO: why need to feed?
-            feed_params[agent.value_net.is_training] = True
-
-        if isinstance(agent, DrqnAgent):
-            run_params += [agent.hidden_state.belief_update]
-            feed_params[agent.hidden_state.is_end] = dones
+        # run_params = [
+        #     agent.qvalue_net.loss,
+        #     agent.qvalue_net.train_op, agent.hidden_state.train_op, agent.feature_net.train_op
+        # ]
+        #
+        # feed_params = {
+        #     agent.feature_net.states: states,
+        #     agent.feature_net.is_training: True,
+        #     agent.qvalue_net.actions: actions,
+        #     agent.qvalue_net.td_target: td_target,
+        #     agent.qvalue_net.is_training: True,
+        # }
+        #
+        # if agent.special.get("dueling_network", False):
+        #     run_params[0] = agent.agent_loss
+        #     run_params += [agent.value_net.train_op]
+        #     feed_params[agent.value_net.td_target] = td_target  # @TODO: why need to feed?
+        #     feed_params[agent.value_net.is_training] = True
+        #
+        # if isinstance(agent, DrqnAgent):
+        #     run_params += [agent.hidden_state.belief_update]
+        #     feed_params[agent.hidden_state.is_end] = dones
 
         run_results = sess.run(
             run_params,
@@ -68,9 +151,8 @@ def update(sess, agent, target_agent, transitions, init_state=None,
 
 
 def generate_sessions(
-        sess, agent, target_agent, env_pool,
-        t_max=1000, epsilon=0.01,
-        update_fn=None):
+        sess, agent, target_agent, env_pool, update_fn,
+        t_max=1000, epsilon=0.01):
     total_reward = 0.0
     total_qvalue_loss = 0.0
     total_games = 0.0
@@ -80,10 +162,9 @@ def generate_sessions(
         actions = epsilon_greedy_actions(agent, sess, states, epsilon=epsilon)
         next_states, rewards, dones, _ = env_pool.step(actions)
 
-        if update_fn is not None:
-            transition = Transition(
-                state=states, action=actions, reward=rewards, next_state=next_states, done=dones)
-            total_qvalue_loss += update_fn(sess, agent, target_agent, transition)
+        transition = Transition(
+            state=states, action=actions, reward=rewards, next_state=next_states, done=dones)
+        total_qvalue_loss += update_fn(sess, agent, target_agent, transition)
 
         states = next_states
 
@@ -122,7 +203,7 @@ def dqn_learning(
     for i in tr:
         sessions = [
             generate_sessions(
-                sess, agent, target_agent, env, t_max, epsilon=epsilon, update_fn=update_fn)
+                sess, agent, target_agent, env, update_fn, t_max=t_max, epsilon=epsilon)
             for _ in range(n_sessions)]
         session_rewards, session_qvalue_loss, session_steps = map(np.array, zip(*sessions))
 
@@ -155,10 +236,11 @@ def run(env_name, make_env_fn, agent_cls,
         n_games=10,
         use_target_net=False):
     run_wrapper(
-        n_games, dqn_learning, update_wraper(update, **update_args),
+        n_games, dqn_learning,
+        update,
         play_session, epsilon_greedy_actions,
-        env_name, make_env_fn, agent_cls,
-        run_args, agent_agrs,
+        env_name, make_env_fn, agent_cls, agent2params,
+        run_args, agent_agrs, update_args,
         log_dir=log_dir,
         plot_stats=plot_stats, api_key=api_key,
         load=load, gpu_option=gpu_option,
@@ -197,12 +279,12 @@ def _parse_args():
     parser.add_argument(
         '--qvalue_lr',
         type=float,
-        default=1e-4,
+        default=1e-5,
         help='Learning rate for qvalue network. (default: %(default)s)')
     parser.add_argument(
         '--value_lr',
         type=float,
-        default=1e-4,
+        default=1e-5,
         help='Learning rate for value network. (default: %(default)s)')
 
     # agent special params & optimization

@@ -31,10 +31,10 @@ def update(sess, reinforce_agent, transitions, initial_state=None,
     state_history = np.array(state_history[::-1])
     action_history = np.array(action_history[::-1])
 
-    if not time_major:
-        state_history = state_history.swapaxes(0, 1)
-        action_history = action_history.swapaxes(0, 1)
-        policy_targets = policy_targets.swapaxes(0, 1)
+    # if not time_major:
+    #     state_history = state_history.swapaxes(0, 1)
+    #     action_history = action_history.swapaxes(0, 1)
+    #     policy_targets = policy_targets.swapaxes(0, 1)
 
     time_len = state_history.shape[0]
 
@@ -75,9 +75,8 @@ def update(sess, reinforce_agent, transitions, initial_state=None,
     return policy_loss / time_len
 
 
-def generate_sessions(sess, a3c_agent, env_pool, t_max=1000, update_fn=None):
+def generate_sessions(sess, a3c_agent, env_pool, update_fn, t_max=1000):
     total_reward = 0.0
-    total_policy_loss = 0.0
     total_games = 0.0
 
     transitions = []
@@ -94,14 +93,13 @@ def generate_sessions(sess, a3c_agent, env_pool, t_max=1000, update_fn=None):
         total_reward += rewards.mean()
         total_games += dones.sum()
 
-    if update_fn is not None:
-        total_policy_loss = update_fn(sess, a3c_agent, transitions)
+    total_policy_loss = update_fn(sess, a3c_agent, transitions)
 
     return total_reward, total_policy_loss, total_games
 
 
 def reinforce_learning(
-        sess, a3c_agent, env, update_fn,
+        sess, agent, env, update_fn,
         n_epochs=1000, n_sessions=100, t_max=1000):
     tr = trange(
         n_epochs,
@@ -116,7 +114,7 @@ def reinforce_learning(
 
     for i in tr:
         sessions = [
-            generate_sessions(sess, a3c_agent, env, t_max, update_fn=update_fn)
+            generate_sessions(sess, agent, env, update_fn, t_max)
             for _ in range(n_sessions)]
         session_rewards, session_policy_loss, session_steps = \
             map(np.array, zip(*sessions))
@@ -157,7 +155,7 @@ def _parse_args():
     parser.add_argument(
         '--policy_lr',
         type=float,
-        default=1e-4,
+        default=1e-5,
         help='Learning rate for policy network. (default: %(default)s)')
 
     parser.add_argument(
@@ -172,6 +170,8 @@ def _parse_args():
 
 def main():
     args = _parse_args()
+
+    assert args.time_major, "Please, use time_major flag for updates"
 
     network, run_args, update_args, optimization_params, make_env_fn = typical_argsparse(args)
 
