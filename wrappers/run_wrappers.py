@@ -85,11 +85,11 @@ def run_wrapper(
         n_games, learning_fn, update_fn, play_fn, action_fn,
         env_name, make_env_fn, agent_cls,
         run_args, agent_agrs,
-        log_dir=None,
+        log_dir=None, episode_limit=None,
         plot_stats=False, api_key=None,
         load=False, gpu_option=0.4,
         use_target_network=False):
-    env = make_env_fn(env_name, n_games)
+    env = make_env_fn(env_name, n_games, episode_limit=episode_limit)
 
     n_actions = env.action_space.n
     state_shape = env.observation_space.shape
@@ -130,8 +130,9 @@ def run_wrapper(
         agent = create_agent(agent_cls, state_shape, n_actions, agent_agrs, use_target_network)
 
         env_name = env_name.replace("Deterministic", "")
-        env = make_env_fn(env_name, 1, limit=True)
+        env = make_env_fn(env_name, 1, episode_limit==None)
         monitor_dir = os.path.join(log_dir, "monitor")
+
         env = gym.wrappers.Monitor(env, monitor_dir, force=True)
 
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
@@ -173,6 +174,11 @@ def typical_args(parser):
         type=int,
         default=1000,
         help='Steps per game session to play. (default: %(default)s)')
+    parser.add_argument(
+        '--episode_limit',
+        type=int,
+        default=None,
+        help='Max steps in environment to play. (default: %(default)s)')
     parser.add_argument(
         '--plot_history',
         action='store_true',
@@ -307,13 +313,13 @@ def typical_args(parser):
     # preprocess args for image envs
     parser.add_argument(
         '--image_width',
-        type=float,
+        type=int,
         default=64,
         help='Image-based environments preprocessing, cut to current width. '
              '(default: %(default)s)')
     parser.add_argument(
         '--image_height',
-        type=float,
+        type=int,
         default=64,
         help='Image-based environments preprocessing, cut to current height. '
              '(default: %(default)s)')
@@ -357,11 +363,11 @@ def typical_argsparse(args):
             crop_fn = None
 
         image_preprocessing_params = {
-            "width": args.image_width,
-            "height": args.image_height,
+            "width": int(args.image_width),
+            "height": int(args.image_height),
             "grayscale": args.image_grayscale,
             "crop": crop_fn,
-            "n_frames": args.n_frames
+            "n_frames": int(args.n_frames)
         }
 
         make_env_fn = make_env_wrapper(make_image_env, image_preprocessing_params)
@@ -377,21 +383,21 @@ def typical_argsparse(args):
         }})
 
     run_args = {
-        "n_epochs": args.n_epochs,
-        "n_sessions": args.n_sessions,
-        "t_max": args.t_max
+        "n_epochs": int(args.n_epochs),
+        "n_sessions": int(args.n_sessions),
+        "t_max": int(args.t_max)
     }
     update_args = {
-        "discount_factor": args.gamma,
-        "reward_norm": args.reward_norm,
-        "batch_size": args.batch_size,
+        "discount_factor": float(args.gamma),
+        "reward_norm": float(args.reward_norm),
+        "batch_size": int(args.batch_size),
         "time_major": args.time_major,
     }
     optimization_params = {
-        "initial_lr": args.feature_lr,
-        "decay_steps": args.lr_decay_steps,
-        "lr_decay": args.lr_decay,
-        "grad_clip": args.grad_clip
+        "initial_lr": float(args.feature_lr),
+        "decay_steps": int(args.lr_decay_steps),
+        "lr_decay": float(args.lr_decay),
+        "grad_clip": float(args.grad_clip)
     }
 
     return network, run_args, update_args, optimization_params, make_env_fn
