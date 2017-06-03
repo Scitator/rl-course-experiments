@@ -85,10 +85,12 @@ def generate_sessions(
 
         states = next_states
 
-        total_reward += rewards.mean()
+        total_reward += rewards.sum()
         total_games += dones.sum()
 
-    return total_reward, total_qvalue_loss, total_games
+    return total_reward / env_pool.n_envs, \
+           total_qvalue_loss / t_max, \
+           total_games / env_pool.n_envs
 
 
 def dqn_learning(

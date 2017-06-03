@@ -128,12 +128,14 @@ def generate_sessions(sess, a3c_agent, env_pool, update_fn, t_max=1000):
 
         states = next_states
 
-        total_reward += rewards.mean()
+        total_reward += rewards.sum()
         total_games += dones.sum()
 
     total_policy_loss, total_value_loss = update_fn(sess, a3c_agent, transitions, init_state)
 
-    return total_reward, total_policy_loss, total_value_loss, total_games
+    return total_reward / env_pool.n_envs, \
+           total_policy_loss, total_value_loss, \
+           total_games / env_pool.n_envs
 
 
 def a3c_learning(

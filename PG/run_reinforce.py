@@ -31,11 +31,6 @@ def update(sess, reinforce_agent, transitions, initial_state=None,
     state_history = np.array(state_history[::-1])
     action_history = np.array(action_history[::-1])
 
-    # if not time_major:
-    #     state_history = state_history.swapaxes(0, 1)
-    #     action_history = action_history.swapaxes(0, 1)
-    #     policy_targets = policy_targets.swapaxes(0, 1)
-
     time_len = state_history.shape[0]
 
     policy_loss = 0.0
@@ -90,12 +85,14 @@ def generate_sessions(sess, a3c_agent, env_pool, update_fn, t_max=1000):
             state=states, action=actions, reward=rewards, next_state=next_states, done=dones))
         states = next_states
 
-        total_reward += rewards.mean()
+        total_reward += rewards.sum()
         total_games += dones.sum()
 
     total_policy_loss = update_fn(sess, a3c_agent, transitions)
 
-    return total_reward, total_policy_loss, total_games
+    return total_reward / env_pool.n_envs, \
+           total_policy_loss, \
+           total_games / env_pool.n_envs
 
 
 def reinforce_learning(
