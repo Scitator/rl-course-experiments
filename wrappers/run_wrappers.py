@@ -103,11 +103,12 @@ def run_wrapper(
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-        saver = tf.train.Saver(keep_checkpoint_every_n_hours=1)
+        saver = tf.train.Saver(
+            var_list=tf.trainable_variables(), 
+            keep_checkpoint_every_n_hours=1)
 
-        if not load:
-            sess.run(tf.global_variables_initializer())
-        else:
+        sess.run(tf.global_variables_initializer())
+        if load:
             saver.restore(sess, "{}/model.ckpt".format(log_dir))
 
         save_model(sess, saver, log_dir)
@@ -130,13 +131,16 @@ def run_wrapper(
         agent = create_agent(agent_cls, state_shape, n_actions, agent_agrs, use_target_network)
 
         env_name = env_name.replace("Deterministic", "")
-        env = make_env_fn(env_name, 1, episode_limit==None)
+        env = make_env_fn(env_name, -1, episode_limit=None)
         monitor_dir = os.path.join(log_dir, "monitor")
 
         env = gym.wrappers.Monitor(env, monitor_dir, force=True)
 
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-            saver = tf.train.Saver()
+            saver = tf.train.Saver(
+                var_list=tf.trainable_variables(), 
+                keep_checkpoint_every_n_hours=1)
+            sess.run(tf.global_variables_initializer())
             saver.restore(sess, "{}/model.ckpt".format(log_dir))
 
             sessions = [play_fn(sess, agent, env, action_fn=action_fn) for _ in range(300)]
