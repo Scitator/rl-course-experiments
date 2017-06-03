@@ -92,7 +92,7 @@ def generate_sessions(sess, a3c_agent, env_pool, update_fn, t_max=1000):
 
     return total_reward / env_pool.n_envs, \
            total_policy_loss, \
-           total_games / env_pool.n_envs
+           t_max / (total_games / env_pool.n_envs)
 
 
 def reinforce_learning(

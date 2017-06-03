@@ -90,7 +90,7 @@ def generate_sessions(
 
     return total_reward / env_pool.n_envs, \
            total_qvalue_loss / t_max, \
-           total_games / env_pool.n_envs
+           t_max / (total_games / env_pool.n_envs)
 
 
 def dqn_learning(
