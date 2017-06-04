@@ -1,23 +1,34 @@
 import argparse
-import numpy as np
-from tqdm import trange
 
+import numpy as np
 from rstools.utils.batch_utils import iterate_minibatches
+from tqdm import trange
 
 from DQN.dqn import DqnAgent
 from DQN.drqn import DrqnAgent
 from agents.agent_networks import copy_model_parameters
-from agents.networks import activations
+from common.networks import activations
+from common.buffer import buffers
 from wrappers.gym_wrappers import Transition
 from wrappers.run_wrappers import typical_args, typical_argsparse, run_wrapper, update_wraper, \
     epsilon_greedy_actions, play_session
 
 
 def update(sess, agent, target_agent, transitions, init_state=None,
-           discount_factor=0.99, reward_norm=1.0, batch_size=32, time_major=False):
+           discount_factor=0.99, reward_norm=1.0, batch_size=32, time_major=False,
+           replay_buffer=None):
     loss = 0.0
-    time_len = transitions.state.shape[0]
+    if replay_buffer is not None:
+        for transition in zip(
+                transitions.state, transitions.action, transitions.reward,
+                transitions.next_state, transitions.done.astype(np.float32)):
+            replay_buffer.add(*transition)
+        states, actions, rewards, next_states, dones = replay_buffer.sample(batch_size)
+        transitions = Transition(
+            state=states, action=actions, reward=rewards,
+            next_state=next_states, done=dones.astype(bool))
 
+    time_len = transitions.state.shape[0]
     transitions_it = zip(
         iterate_minibatches(transitions.state, batch_size),
         iterate_minibatches(transitions.action, batch_size),
@@ -78,7 +89,6 @@ def generate_sessions(
     for t in range(t_max):
         actions = epsilon_greedy_actions(agent, sess, states, epsilon=epsilon)
         next_states, rewards, dones, _ = env_pool.step(actions)
-
         transition = Transition(
             state=states, action=actions, reward=rewards, next_state=next_states, done=dones)
         total_qvalue_loss += update_fn(sess, agent, target_agent, transition)
@@ -176,6 +186,18 @@ def _parse_args():
         choices=["dqn", "drqn"],
         help='Which agent to use. (default: %(default)s)')
 
+    parser.add_argument(
+        '--replay_buffer',
+        type=str,
+        choices=["none", "simple", "prioritized"],
+        default="none",
+        help="ReplayBuffer to use for training")
+    parser.add_argument(
+        '--replay_buffer_size',
+        type=int,
+        default=5000,
+        help="Number of transitions to store in replay buffer.")
+
     # special exploration params
     parser.add_argument(
         '--initial_epsilon',
@@ -235,15 +257,21 @@ def main():
         "final_epsilon": args.final_epsilon,
         "copy_n_epoch": args.copy_n_epoch
     }
+    run_args = {**run_args, **special_run_args}
 
-    run_args = {
-        **run_args, **special_run_args}
+    buffer = buffers[args.replay_buffer](args.replay_buffer_size) \
+        if args.replay_buffer != "none" \
+        else None
+    special_update_args = {
+        "replay_buffer": buffer
+    }
+
+    update_args = {**update_args, **special_update_args}
 
     qvalue_optimization_params = {
         **optimization_params,
         **{"initial_lr": args.qvalue_lr}
     }
-
     value_optimization_params = {
         **optimization_params,
         **{"initial_lr": args.value_lr}

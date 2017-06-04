@@ -1,11 +1,11 @@
 import argparse
+
 import numpy as np
+from rstools.utils.batch_utils import iterate_minibatches
 from tqdm import trange
 
-from rstools.utils.batch_utils import iterate_minibatches
-
 from PG.reinforce import ReinforceAgent
-from agents.networks import activations
+from common.networks import activations
 from wrappers.gym_wrappers import Transition
 from wrappers.run_wrappers import typical_args, typical_argsparse, run_wrapper, update_wraper, \
     epsilon_greedy_policy, play_session

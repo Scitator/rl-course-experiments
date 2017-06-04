@@ -57,11 +57,3 @@ def network_wrapper(network, params):
     def wrapper(states, is_training=False, scope=None, reuse=False,):
         return network(states, is_training, scope, reuse, **params)
     return wrapper
-
-
-def str2params(string, delimeter="-"):
-    try:
-        result = tuple(map(int, string.split(delimeter)))
-    except:
-        result = None
-    return result

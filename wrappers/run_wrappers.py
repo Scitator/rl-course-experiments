@@ -7,13 +7,21 @@ import tensorflow as tf
 from rstools.utils.os_utils import save_history, save_model, create_if_need
 from rstools.visualization.plotter import plot_all_metrics
 
-from agents.networks import activations, networks, network_wrapper, str2params
+from common.networks import activations, networks, network_wrapper
 from wrappers.gym_wrappers import make_env, make_image_env, make_env_wrapper
 
 try:
     import ppaquette_gym_doom
 except ImportError:
     print("no doom envs")
+
+
+def str2params(string, delimeter="-"):
+    try:
+        result = tuple(map(int, string.split(delimeter)))
+    except:
+        result = None
+    return result
 
 
 def epsilon_greedy_policy(agent, sess, observations):
@@ -54,12 +62,9 @@ def play_session(sess, agent, env, action_fn, t_max=int(1e10)):
 
 def update_wraper(
         update_fn,
-        discount_factor=0.99, reward_norm=1.0, batch_size=32, time_major=False):
+        **kwargs):
     def wrapper(*args):
-        return update_fn(
-            *args,
-            discount_factor=discount_factor, reward_norm=reward_norm,
-            batch_size=batch_size, time_major=time_major)
+        return update_fn(*args, **kwargs)
 
     return wrapper
 
