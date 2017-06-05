@@ -6,7 +6,7 @@ from tqdm import trange
 
 from A3C.a3c_ff import A3CFFAgent
 from A3C.a3c_lstm import A3CLstmAgent
-from agents.networks import activations
+from common.networks import activations
 from wrappers.gym_wrappers import Transition
 from wrappers.run_wrappers import typical_args, typical_argsparse, run_wrapper, update_wraper, \
     epsilon_greedy_policy, play_session
@@ -40,15 +40,6 @@ def update(sess, a3c_agent, transitions, initial_state=None,
     state_history = np.array(state_history[::-1])
     action_history = np.array(action_history[::-1])
     done_history = np.array(done_history[::-1])
-
-    # if not time_major:
-    #     assert not isinstance(a3c_agent, A3CLstmAgent), "Please, use time_major flag for updates"
-    #
-    #     state_history = state_history.swapaxes(0, 1)
-    #     action_history = action_history.swapaxes(0, 1)
-    #     done_history = done_history.swapaxes(0, 1)
-    #     value_targets = value_targets.swapaxes(0, 1)
-    #     policy_targets = policy_targets.swapaxes(0, 1)
 
     if isinstance(a3c_agent, A3CLstmAgent):
         a3c_agent.assign_belief_state(sess, initial_state)
@@ -128,12 +119,17 @@ def generate_sessions(sess, a3c_agent, env_pool, update_fn, t_max=1000):
 
         states = next_states
 
-        total_reward += rewards.mean()
+        total_reward += rewards.sum()
         total_games += dones.sum()
+
+        if env_pool.n_envs == 1 and total_games > 0:
+            break
 
     total_policy_loss, total_value_loss = update_fn(sess, a3c_agent, transitions, init_state)
 
-    return total_reward, total_policy_loss, total_value_loss, total_games
+    return total_reward / env_pool.n_envs, \
+           total_policy_loss, total_value_loss, \
+           t / (total_games / env_pool.n_envs)
 
 
 def a3c_learning(

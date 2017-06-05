@@ -131,10 +131,10 @@ class EnvPool(Wrapper):
 
 def make_env(env_name, n_games=1, episode_limit=None, n_frames=1):
     env = gym.make(env_name) if episode_limit is None else gym.make(env_name).env
+    env = FrameBuffer(env, n_frames=n_frames) if n_frames > 1 else env
     if episode_limit is not None:
         env = TimeLimit(env, max_episode_steps=episode_limit)
-    env = FrameBuffer(env, n_frames=n_frames) if n_frames > 1 else env
-    return EnvPool(env, n_games) if n_games > 1 else env
+    return EnvPool(env, n_games) if n_games > 0 else env
 
 
 def make_image_env(
@@ -143,13 +143,13 @@ def make_image_env(
         width=64, height=64,
         grayscale=True, crop=None):
     env = gym.make(env_name) if episode_limit is None else gym.make(env_name).env
-    if episode_limit is not None:
-        env = TimeLimit(env, max_episode_steps=episode_limit)
     if "ppaquette" in env_name:
         env = SkipWrapper(4)(ToDiscrete("minimal")(env))
     env = PreprocessImage(env, width=width, height=height, grayscale=grayscale, crop=crop)
     env = FrameBuffer(env, n_frames=n_frames) if n_frames > 1 else env
-    return EnvPool(env, n_games) if n_games > 1 else env
+    if episode_limit is not None:
+        env = TimeLimit(env, max_episode_steps=episode_limit)
+    return EnvPool(env, n_games) if n_games > 0 else env
 
 
 def make_env_wrapper(make_env_fn, params):

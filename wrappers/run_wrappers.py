@@ -7,13 +7,21 @@ import tensorflow as tf
 from rstools.utils.os_utils import save_history, save_model, create_if_need
 from rstools.visualization.plotter import plot_all_metrics
 
-from agents.networks import activations, networks, network_wrapper, str2params
+from common.networks import activations, networks, network_wrapper
 from wrappers.gym_wrappers import make_env, make_image_env, make_env_wrapper
 
 try:
     import ppaquette_gym_doom
 except ImportError:
     print("no doom envs")
+
+
+def str2params(string, delimeter="-"):
+    try:
+        result = tuple(map(int, string.split(delimeter)))
+    except:
+        result = None
+    return result
 
 
 def epsilon_greedy_policy(agent, sess, observations):
@@ -54,12 +62,9 @@ def play_session(sess, agent, env, action_fn, t_max=int(1e10)):
 
 def update_wraper(
         update_fn,
-        discount_factor=0.99, reward_norm=1.0, batch_size=32, time_major=False):
+        **kwargs):
     def wrapper(*args):
-        return update_fn(
-            *args,
-            discount_factor=discount_factor, reward_norm=reward_norm,
-            batch_size=batch_size, time_major=time_major)
+        return update_fn(*args, **kwargs)
 
     return wrapper
 
@@ -103,11 +108,12 @@ def run_wrapper(
 
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=gpu_option)
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-        saver = tf.train.Saver(keep_checkpoint_every_n_hours=1)
+        saver = tf.train.Saver(
+            var_list=tf.trainable_variables(), 
+            keep_checkpoint_every_n_hours=1)
 
-        if not load:
-            sess.run(tf.global_variables_initializer())
-        else:
+        sess.run(tf.global_variables_initializer())
+        if load:
             saver.restore(sess, "{}/model.ckpt".format(log_dir))
 
         save_model(sess, saver, log_dir)
@@ -130,13 +136,16 @@ def run_wrapper(
         agent = create_agent(agent_cls, state_shape, n_actions, agent_agrs, use_target_network)
 
         env_name = env_name.replace("Deterministic", "")
-        env = make_env_fn(env_name, 1, episode_limit==None)
+        env = make_env_fn(env_name, -1, episode_limit=None)
         monitor_dir = os.path.join(log_dir, "monitor")
 
         env = gym.wrappers.Monitor(env, monitor_dir, force=True)
 
         with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-            saver = tf.train.Saver()
+            saver = tf.train.Saver(
+                var_list=tf.trainable_variables(), 
+                keep_checkpoint_every_n_hours=1)
+            sess.run(tf.global_variables_initializer())
             saver.restore(sess, "{}/model.ckpt".format(log_dir))
 
             sessions = [play_fn(sess, agent, env, action_fn=action_fn) for _ in range(300)]
