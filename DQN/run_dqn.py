@@ -98,9 +98,12 @@ def generate_sessions(
         total_reward += rewards.sum()
         total_games += dones.sum()
 
+        if env_pool.n_envs == 1 and total_games > 0:
+            break
+
     return total_reward / env_pool.n_envs, \
-           total_qvalue_loss / t_max, \
-           t_max / (total_games / env_pool.n_envs)
+           total_qvalue_loss / t, \
+           t / (total_games / env_pool.n_envs)
 
 
 def dqn_learning(

@@ -88,11 +88,14 @@ def generate_sessions(sess, a3c_agent, env_pool, update_fn, t_max=1000):
         total_reward += rewards.sum()
         total_games += dones.sum()
 
+        if env_pool.n_envs == 1 and total_games > 0:
+            break
+
     total_policy_loss = update_fn(sess, a3c_agent, transitions)
 
     return total_reward / env_pool.n_envs, \
            total_policy_loss, \
-           t_max / (total_games / env_pool.n_envs)
+           t / (total_games / env_pool.n_envs)
 
 
 def reinforce_learning(
