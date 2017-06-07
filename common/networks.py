@@ -35,7 +35,7 @@ def convolution_network(
     kernels = kernels or [8, 4, 4]
     strides = strides or [4, 2, 1]
     x = states
-    with tf.variable_scope(scope or "linear_network", reuse=reuse):
+    with tf.variable_scope(scope or "convolution_network", reuse=reuse):
         for n_filter, kernel, stride in zip(n_filters, kernels, strides):
             x = tf.layers.conv2d(x, n_filter, kernel, stride, activation=None)
             if use_bn:

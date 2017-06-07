@@ -48,31 +48,41 @@ For simple script running you need to install additional [repo](https://github.c
 DQN:
 
 ```
-PYTHONPATH=. python DQN/run_dqn.py --plot_history 
---feature_network linear --layers 16-16 --activation tanh --hidden_size 16 --hidden_activation tanh 
---n_epochs 500 --n_games 32 --batch_size 32 --t_max 100  
---qvalue_lr 0.00005 --feature_lr 0.00005 --value_lr 0.00005 --initial_epsilon 0.25 
+PYTHONPATH=. python DQN/run_dqn.py --plot_history --env CartPole-v0 \
+--feature_network linear --layers 128-128 --hidden_size 64 \
+--n_epochs 1000 --n_games 4 --batch_size 128 --t_max 500 --episode_limit 500 \
+--replay_buffer simple --replay_buffer_size 2000 \
+--qvalue_lr 0.0001 --feature_lr 0.0001 --value_lr 0.0001 \
+--initial_epsilon 0.8 --final_epsilon 0.1 \
+--gpu_option 0.25 \
 --api_key <paste_your_gym_api_key_here>
 ```
 
 Reinforce:
 
 ```
-PYTHONPATH=. python PG/run_reinforce.py --plot_history 
---feature_network linear --layers 16-16 --activation tanh --hidden_size 16 --hidden_activation tanh 
---n_epochs 3200 --n_games 32 --batch_size 32 --t_max 50 
---entropy_factor 0.005 --policy_lr 0.00001 --feature_lr 0.00005 
+PYTHONPATH=. python PG/run_reinforce.py --plot_history --env CartPole-v0 \ 
+--feature_network linear --layers 128-128 --hidden_size 64 \ 
+--n_epochs 10000 --n_games 1 --batch_size 1 --t_max 500 --episode_limit 500 \
+--entropy_factor 0.005 --policy_lr 0.0000001 --feature_lr 0.0000001 --grad_clip 10.0 \ 
+ --gpu_option 0.25 --time_major \
 --api_key <paste_your_gym_api_key_here>
 ```
 
 Feed-Forward Asynchronous Advantage Actor-Critic:
 
 ```
-PYTHONPATH=. python A3C/run_a3c.py --plot_history 
---feature_network linear --layers 16-16 --activation tanh --hidden_size 16 --hidden_activation tanh 
---n_epochs 200 --n_games 32 --batch_size 32 --t_max 10 --policy_lr 0.000001 
+PYTHONPATH=. python A3C/run_a3c.py --plot_history --env CartPole-v0 \
+--feature_network linear --layers 128-128 --hidden_size 64 \  
+--n_epochs 500 --n_games 1 --batch_size 1 --t_max 100 --episode_limit 500 \
+--entropy_factor 0.005 --policy_lr 0.00001 --feature_lr 0.00001 --value_lr 0.00001 --grad_clip 10.0 \
+--gpu_option 0.25 --time_major \
 --api_key <paste_your_gym_api_key_here>
 ```
+
+If agent start to play well, you can always stop training by `Ctrl+C` hotkey.
+If something go wrong, you can always evaluate agent thought magic `--load --n_epochs 0` 
+combination.
 
 ##### Metrics
 

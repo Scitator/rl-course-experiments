@@ -167,6 +167,11 @@ def typical_args(parser):
         type=int,
         default=10,
         help='Number of parallel games to play during training. (default: %(default)s)')
+    parser.add_argument(
+        '--reload_envs',
+        action='store_true',
+        default=False,
+        help='Flag for auto-reloading environments if they done. (default: %(default)s)')
 
     parser.add_argument(
         '--n_epochs',
@@ -356,7 +361,12 @@ def typical_argsparse(args):
         network_args = {
             "layers": str2params(args.layers)
         }
-        make_env_fn = make_env_wrapper(make_env, {"n_frames": args.n_frames})
+
+        env_args = {
+            "n_frames": args.n_frames,
+            "autoreload_envs": args.autoreload_envs
+        }
+        make_env_fn = make_env_wrapper(make_env, env_args)
     elif args.feature_network == "convolution":
         network_args = {
             "n_filters": str2params(args.n_filters),
@@ -376,7 +386,8 @@ def typical_argsparse(args):
             "height": int(args.image_height),
             "grayscale": args.image_grayscale,
             "crop": crop_fn,
-            "n_frames": int(args.n_frames)
+            "n_frames": int(args.n_frames),
+            "autoreload_envs": args.autoreload_envs
         }
 
         make_env_fn = make_env_wrapper(make_image_env, image_preprocessing_params)

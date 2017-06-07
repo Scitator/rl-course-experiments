@@ -88,7 +88,7 @@ class EnvPool(Wrapper):
         Typical EnvPool, that does not care about done envs.
     """
 
-    def __init__(self, env, n_envs=16):
+    def __init__(self, env, n_envs=16, autoreload_envs=False):
         super(EnvPool, self).__init__(env)
         self.initial_env = env
         self.n_envs = n_envs
@@ -129,17 +129,17 @@ class EnvPool(Wrapper):
         return self._states.copy()
 
 
-def make_env(env_name, n_games=1, episode_limit=None, n_frames=1):
+def make_env(env_name, n_games=1, episode_limit=None, n_frames=1, autoreload_envs=False):
     env = gym.make(env_name) if episode_limit is None else gym.make(env_name).env
     env = FrameBuffer(env, n_frames=n_frames) if n_frames > 1 else env
     if episode_limit is not None:
         env = TimeLimit(env, max_episode_steps=episode_limit)
-    return EnvPool(env, n_games) if n_games > 0 else env
+    return EnvPool(env, n_games, autoreload_envs) if n_games > 0 else env
 
 
 def make_image_env(
         env_name, n_games=1, episode_limit=None,
-        n_frames=1,
+        n_frames=1, autoreload_envs=False,
         width=64, height=64,
         grayscale=True, crop=None):
     env = gym.make(env_name) if episode_limit is None else gym.make(env_name).env
@@ -149,7 +149,7 @@ def make_image_env(
     env = FrameBuffer(env, n_frames=n_frames) if n_frames > 1 else env
     if episode_limit is not None:
         env = TimeLimit(env, max_episode_steps=episode_limit)
-    return EnvPool(env, n_games) if n_games > 0 else env
+    return EnvPool(env, n_games, autoreload_envs) if n_games > 0 else env
 
 
 def make_env_wrapper(make_env_fn, params):
